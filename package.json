@@ -1,0 +1,16 @@
+{
+  "name": "internova",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "extension",
+    "frontend"
+  ],
+  "scripts": {
+    "test": "npm run test -w @internova/core",
+    "typecheck": "npm run typecheck -w @internova/core && npm run typecheck -w @internova/extension",
+    "build:extension": "npm run build -w @internova/extension",
+    "dev:web": "npm run dev -w frontend",
+    "build:web": "npm run build -w frontend"
+  }
+}
