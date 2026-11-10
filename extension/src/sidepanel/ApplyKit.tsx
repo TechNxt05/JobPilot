@@ -132,8 +132,8 @@ export function ApplyKit({ job, resumeId, keySet, goTo }: { job: JobPosting; res
     return (
       <div className="card subtle">
         <h3>Cover letter & tailored resume</h3>
-        <p className="muted small">Add an AI key in Settings to write a cover letter and tailor your resume to this job.</p>
-        <button className="btn" onClick={() => goTo("settings")}>Add API key</button>
+        <p className="muted small">Write a cover letter and tailor your resume to this job. Sign in (Settings → Account) to use JobPilot AI, free for 20 actions a day, or add your own key under Settings → Advanced.</p>
+        <button className="btn" onClick={() => goTo("settings")}>Turn on AI</button>
       </div>
     );
   }
@@ -155,7 +155,7 @@ export function ApplyKit({ job, resumeId, keySet, goTo }: { job: JobPosting; res
         {letterErr && <p className="error-text">{letterErr}</p>}
         {letter && (
           <>
-            <textarea rows={14} value={letterText} onChange={(e) => setLetterText(e.target.value)} aria-label="Cover letter" />
+            <textarea rows={14} value={letterText} onChange={(e) => setLetterText(e.target.value)} aria-label="Cover letter text" />
             {letter.warnings.length > 0 && <ul className="plain small warn-text">{letter.warnings.map((w) => <li key={w}>⚠ {w}</li>)}</ul>}
             <div className="row gap">
               <button className="btn small" onClick={() => navigator.clipboard.writeText(letterText)}>Copy</button>

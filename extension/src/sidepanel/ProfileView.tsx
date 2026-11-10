@@ -30,16 +30,23 @@ export function ProfileView({ resumes, keySet }: { resumes: StoredResume[]; keyS
   const latest = useRef(profile);
   latest.current = profile;
 
+  const dirtyRef = useRef(false);
   useEffect(() => {
-    getProfile().then((p) => {
+    const load = () => getProfile().then((p) => {
       if (p) {
         setProfile(p);
         setSaved(p);
       }
     });
+    load();
+    // Pick up changes made elsewhere (sync, autofill answers) unless the user has unsaved edits
+    const onChange = (c: Record<string, chrome.storage.StorageChange>) => { if (c.profile && !dirtyRef.current) load(); };
+    chrome.storage.onChanged.addListener(onChange);
+    return () => chrome.storage.onChanged.removeListener(onChange);
   }, []);
 
   const dirty = JSON.stringify({ ...profile, updatedAt: 0 }) !== JSON.stringify({ ...saved, updatedAt: 0 });
+  dirtyRef.current = dirty;
   const set = <K extends keyof CandidateProfile>(key: K, value: CandidateProfile[K]) => setProfile((p) => ({ ...p, [key]: value }));
 
   async function persist(p: CandidateProfile) {
@@ -208,7 +215,7 @@ export function ProfileView({ resumes, keySet }: { resumes: StoredResume[]; keyS
           <button className="btn" onClick={draftBlankAnswers} disabled={!keySet || drafting}>
             {drafting ? "Drafting…" : "Draft blank answers with AI"}
           </button>
-          {!keySet && <span className="muted small">Add an AI key in Settings to draft answers.</span>}
+          {!keySet && <span className="muted small">Turn on AI in Settings (sign in, or add your own key) to draft answers.</span>}
         </div>
         {QUESTION_CATEGORIES.map((cat) => (
           <div key={cat.id} className="qgroup">
@@ -260,7 +267,7 @@ function Onboarding({ keySet }: { keySet: boolean }) {
       <ol className="steps">
         <li><strong>Upload your resume.</strong> Your profile fills in automatically. It's read and stored only in this browser.</li>
         <li><strong>Review your profile</strong> and add <strong>Additional information</strong> plus answers to common questions.</li>
-        <li><strong>Optional:</strong> add your own AI key in Settings for better parsing, matching and drafted answers{keySet ? " (done)" : ""}.</li>
+        <li><strong>Optional:</strong> sign in (Settings → Account) for JobPilot AI: better parsing, matching, cover letters and tailored resumes, 20 free actions a day{keySet ? " (on)" : ""}.</li>
         <li>Open a job and click <strong>Analyze</strong>. On an application form, use <strong>Autofill</strong>.</li>
       </ol>
     </div>

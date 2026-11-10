@@ -5,7 +5,8 @@ import { AnalyzeView } from "./AnalyzeView";
 import { AutofillView } from "./AutofillView";
 import { ProfileView } from "./ProfileView";
 import { JobsView } from "./JobsView";
-import { startAutoSync } from "../cloud";
+import { cloudConfigured, currentUser, startAutoSync, supabase } from "../cloud";
+import { hostedConfigured } from "../hosted";
 import { SettingsView } from "./SettingsView";
 
 type Tab = "analyze" | "autofill" | "jobs" | "profile" | "settings";
@@ -17,6 +18,7 @@ export function App() {
   const [resumes, setResumes] = useState<StoredResume[]>([]);
   const [settings, setSettings] = useState<AISettings | null>(null);
   const [keySet, setKeySet] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
   const firstLoad = useRef(true);
 
   const refresh = useCallback(async () => {
@@ -33,6 +35,15 @@ export function App() {
 
   // Cloud sync (only when this build has Supabase configured and the user is signed in)
   useEffect(() => startAutoSync((r) => { if (r instanceof Error) console.error("Auto-sync failed:", r.message); }), []);
+
+  useEffect(() => {
+    if (!cloudConfigured) return;
+    currentUser().then((u) => setSignedIn(!!u));
+    const { data } = supabase().auth.onAuthStateChange((_e, session) => setSignedIn(!!session));
+    return () => data.subscription.unsubscribe();
+  }, []);
+  // AI works with the user's own keys, or with JobPilot hosted AI once signed in
+  const aiReady = keySet || (hostedConfigured && signedIn);
 
   useEffect(() => {
     refresh();
@@ -56,11 +67,12 @@ export function App() {
         </nav>
       </header>
       <main className="content">
-        {tab === "analyze" && <AnalyzeView resumes={resumes} keySet={keySet} goTo={setTab} />}
-        {tab === "autofill" && <AutofillView resumes={resumes} keySet={keySet} goTo={setTab} />}
-        {tab === "jobs" && <JobsView />}
-        {tab === "profile" && <ProfileView resumes={resumes} keySet={keySet} />}
-        {tab === "settings" && settings && <SettingsView settings={settings} keySet={keySet} />}
+        {/* Every tab stays mounted (just hidden) so results survive switching tabs */}
+        <div hidden={tab !== "analyze"}><AnalyzeView resumes={resumes} keySet={aiReady} goTo={setTab} /></div>
+        <div hidden={tab !== "autofill"}><AutofillView resumes={resumes} keySet={aiReady} goTo={setTab} /></div>
+        <div hidden={tab !== "jobs"}><JobsView /></div>
+        <div hidden={tab !== "profile"}><ProfileView resumes={resumes} keySet={aiReady} /></div>
+        <div hidden={tab !== "settings"}>{settings && <SettingsView settings={settings} keySet={keySet} signedIn={signedIn} />}</div>
       </main>
     </div>
   );

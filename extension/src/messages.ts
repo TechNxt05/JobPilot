@@ -4,6 +4,7 @@ import type { CoverLetterTone, DraftQuestion, JobAnalysis, JobPosting } from "@i
 export type Request =
   | { type: "analyze-ai"; job: JobPosting }
   | { type: "test-key" }
+  | { type: "ai-quota" }
   | { type: "draft-answers"; questions: DraftQuestion[]; job: JobPosting | null }
   | { type: "parse-resume"; resumeId: string }
   | { type: "cover-letter"; job: Pick<JobPosting, "title" | "company" | "text">; resumeId?: string | null; tone?: CoverLetterTone; words?: number }

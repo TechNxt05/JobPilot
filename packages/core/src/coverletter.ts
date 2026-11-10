@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { JobPosting } from "./job";
 import { escapeLatex, escapeUrl } from "./latex";
 import { profileToContext, type CandidateProfile } from "./profile";
-import { completeParsed, parseJSONLoose, ProviderError, type AIConfig, type CompleteOptions } from "./providers";
+import { completeParsed, looseStrings, looseText, parseJSONLoose, ProviderError, type AIConfig, type CompleteOptions } from "./providers";
 import { ungroundedNumbers, ungroundedSkills } from "./tailor";
 
 /* ------------------------------ Company research ------------------------------ */
@@ -140,7 +140,7 @@ export async function generateCoverLetter(ai: AIConfig, input: CoverLetterInput,
   ].join("\n");
   const { value } = await completeParsed(ai, { system: LETTER_PROMPT, user, ...opts }, (raw) => {
     const parsed = z
-      .object({ subject: z.string().default(""), greeting: z.string().default(""), paragraphs: z.array(z.string()).min(1), closing: z.string().default("Sincerely,") })
+      .object({ subject: looseText(" "), greeting: looseText(" "), paragraphs: looseStrings(/\n\s*\n/).pipe(z.array(z.string()).min(1)), closing: looseText(" ") })
       .safeParse(parseJSONLoose(raw));
     if (!parsed.success) throw new ProviderError("The model's answer didn't match the expected format", null, "invalid_output");
     return parsed.data;

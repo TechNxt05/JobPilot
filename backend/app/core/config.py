@@ -18,13 +18,13 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
     SERPER_API_KEY: str = ""
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
-    OPENAI_MODEL: str = "gpt-4o"
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
+    OPENAI_MODEL: str = "gpt-4o-mini"
     # Fallback providers (any with a key join the chain)
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
     OPENROUTER_API_KEY: str = ""
-    OPENROUTER_MODEL: str = "openai/gpt-4o-mini"
+    OPENROUTER_MODEL: str = "openrouter/free"
     LLM_FALLBACK_ORDER: str = "groq,gemini,openrouter,openai"
     # Same Supabase project as the web app and extension (URL + anon/publishable key; no service key needed)
     SUPABASE_URL: str = ""

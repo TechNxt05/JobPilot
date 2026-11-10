@@ -1,3 +1,4 @@
+import { z } from "zod";
 /**
  * Bring-your-own-key AI provider adapters.
  *
@@ -28,7 +29,7 @@ export const PROVIDERS: Record<ProviderId, ProviderInfo> = {
   groq: {
     id: "groq",
     label: "Groq",
-    defaultModel: "llama-3.3-70b-versatile",
+    defaultModel: "openai/gpt-oss-120b",
     keyUrl: "https://console.groq.com/keys",
     origin: "https://api.groq.com",
   },
@@ -42,14 +43,15 @@ export const PROVIDERS: Record<ProviderId, ProviderInfo> = {
   gemini: {
     id: "gemini",
     label: "Google Gemini",
-    defaultModel: "gemini-2.5-flash",
+    defaultModel: "gemini-3.5-flash-lite",
     keyUrl: "https://aistudio.google.com/app/apikey",
     origin: "https://generativelanguage.googleapis.com",
   },
   openrouter: {
     id: "openrouter",
     label: "OpenRouter",
-    defaultModel: "openai/gpt-4o-mini",
+    // Auto-routes to an available free model; works on free-tier (no credit) accounts
+    defaultModel: "openrouter/free",
     keyUrl: "https://openrouter.ai/keys",
     origin: "https://openrouter.ai",
   },
@@ -102,6 +104,10 @@ export interface CompleteOptions {
   signal?: AbortSignal;
   /** Ask the provider for JSON output (default true) */
   json?: boolean;
+  /** Output token cap (default 8192). Without it some providers reserve their maximum and reject low-credit accounts. */
+  maxTokens?: number;
+  /** Per-provider time limit in ms before falling back to the next provider (default 45 s) */
+  timeoutMs?: number;
 }
 
 /** Single chat completion; returns the raw text content. */
@@ -123,7 +129,7 @@ export async function complete(config: ProviderConfig, opts: CompleteOptions): P
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: opts.system }] },
             contents: [{ role: "user", parts: [{ text: opts.user }] }],
-            generationConfig: { temperature: 0, ...(json ? { responseMimeType: "application/json" } : {}) },
+            generationConfig: { temperature: 0, maxOutputTokens: opts.maxTokens ?? 8192, ...(json ? { responseMimeType: "application/json" } : {}) },
           }),
         },
       );
@@ -140,6 +146,7 @@ export async function complete(config: ProviderConfig, opts: CompleteOptions): P
         body: JSON.stringify({
           model,
           temperature: 0,
+          max_tokens: opts.maxTokens ?? 8192,
           messages: [
             { role: "system", content: opts.system },
             { role: "user", content: opts.user },
@@ -183,6 +190,30 @@ export function parseJSONLoose(text: string): unknown {
   }
 }
 
+/* ------------------------------ Lenient output schemas ------------------------------ */
+// Real models return years/CGPA as numbers, bullets as arrays and missing values as null.
+// These accept all of that and normalise to the strings/arrays the app uses.
+const scalar = z.union([z.string(), z.number(), z.boolean()]);
+const named = z.object({ name: scalar.optional(), title: scalar.optional(), skill: scalar.optional() }).passthrough();
+const flat = (v: unknown): string =>
+  v === null || v === undefined ? "" : typeof v === "object" && !Array.isArray(v)
+    ? String((v as Record<string, unknown>).name ?? (v as Record<string, unknown>).title ?? (v as Record<string, unknown>).skill ?? "")
+    : String(v);
+
+/** String field; arrays are joined with `sep` (newline for bullets, ", " for lists). */
+export const looseText = (sep = "\n") =>
+  z.union([scalar, z.array(z.union([scalar, named])), named]).nullish()
+    .transform((v) => (Array.isArray(v) ? v.map(flat).map((x) => x.trim()).filter(Boolean).join(sep) : flat(v)).trim());
+
+/** Array of strings; a single string becomes one item (or splits on newlines/commas when `split`). */
+export const looseStrings = (split?: RegExp) =>
+  z.union([z.array(z.union([scalar, named])), scalar]).nullish()
+    .transform((v) => (v === null || v === undefined ? [] : Array.isArray(v) ? v.map(flat) : split ? String(v).split(split) : [String(v)])
+      .map((x) => x.trim()).filter(Boolean));
+
+/** Array of objects; null → []. */
+export const looseArray = <T extends z.ZodTypeAny>(item: T) => z.array(item).nullish().transform((v) => (v ?? []) as z.infer<T>[]);
+
 /* ------------------------------ Fallback across providers ------------------------------ */
 
 /** One provider, or several in priority order (e.g. Groq → Gemini → OpenRouter → OpenAI). */
@@ -194,9 +225,15 @@ export interface Attempt {
   error?: string;
 }
 
+/** False for empty values and template placeholders such as "your_openai_api_key". */
+export function isRealKey(key: string | undefined | null): key is string {
+  const k = (key ?? "").trim();
+  return k.length > 0 && !/^(your[_-]|<|xxx|changeme|replace)/i.test(k) && !/\.\.\.$/.test(k);
+}
+
 export function toConfigs(ai: AIConfig | null | undefined): ProviderConfig[] {
   if (!ai) return [];
-  return (Array.isArray(ai) ? ai : [ai]).filter((c) => c && c.apiKey);
+  return (Array.isArray(ai) ? ai : [ai]).filter((c) => c && isRealKey(c.apiKey));
 }
 
 /**
@@ -216,11 +253,26 @@ export async function completeParsed<T>(
   for (const config of configs) {
     const model = config.model?.trim() || PROVIDERS[config.provider].defaultModel;
     try {
-      const value = parse(await complete(config, opts));
+      // A provider that hangs must not block the fallback chain: abort it after timeoutMs
+      const timer = new AbortController();
+      const timeout = setTimeout(() => timer.abort(), opts.timeoutMs ?? 45_000);
+      const signal = opts.signal ? AbortSignal.any([opts.signal, timer.signal]) : timer.signal;
+      let raw: string;
+      try {
+        raw = await complete(config, { ...opts, signal });
+      } catch (e) {
+        if ((e as Error)?.name === "AbortError" && !opts.signal?.aborted) {
+          throw new ProviderError(`${PROVIDERS[config.provider].label} timed out after ${Math.round((opts.timeoutMs ?? 45_000) / 1000)} s`, null, "network");
+        }
+        throw e;
+      } finally {
+        clearTimeout(timeout);
+      }
+      const value = parse(raw);
       attempts.push({ provider: config.provider, model });
       return { value, provider: config.provider, attempts };
     } catch (e) {
-      if ((e as Error)?.name === "AbortError") throw e;
+      if ((e as Error)?.name === "AbortError" && opts.signal?.aborted) throw e;
       const err = e instanceof ProviderError ? e : new ProviderError(scrub((e as Error).message ?? String(e), config.apiKey), null, "invalid_output");
       attempts.push({ provider: config.provider, model, error: err.message });
       last = err;

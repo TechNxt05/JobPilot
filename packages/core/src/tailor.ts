@@ -4,7 +4,7 @@ import { scoreATS } from "./ats";
 import { extractRequirementsHeuristic, type JobPosting } from "./job";
 import { escapeLatex, escapeUrl, latexPreamble, latexToText } from "./latex";
 import { profileToContext, type CandidateProfile } from "./profile";
-import { completeParsed, parseJSONLoose, ProviderError, type AIConfig, type CompleteOptions } from "./providers";
+import { completeParsed, looseArray, looseStrings, looseText, parseJSONLoose, ProviderError, type AIConfig, type CompleteOptions } from "./providers";
 import { analyzeResume } from "./resume";
 import { findSkills } from "./skills";
 
@@ -70,15 +70,16 @@ export interface TailorReport {
   notes: string[];
 }
 
-const s = z.string().nullish().transform((v) => (v ?? "").trim());
+const s = looseText(" ");
+const index = z.union([z.number(), z.string()]).transform((v) => Number(v)).pipe(z.number().int());
 const TailorSchema = z.object({
   headline: s,
   summary: s,
-  experience: z.array(z.object({ source_index: z.number().int(), bullets: z.array(z.string()).default([]) })).default([]),
-  projects: z.array(z.object({ source_index: z.number().int(), bullets: z.array(z.string()).default([]) })).default([]),
-  skills: z.array(z.object({ category: s, items: z.array(z.string()).default([]) })).default([]),
-  extras: z.array(z.object({ heading: s, items: z.array(z.string()).default([]) })).default([]),
-  notes: z.array(z.string()).default([]),
+  experience: looseArray(z.object({ source_index: index, bullets: looseStrings(/\n/) })),
+  projects: looseArray(z.object({ source_index: index, bullets: looseStrings(/\n/) })),
+  skills: looseArray(z.object({ category: s, items: looseStrings(/,/) })),
+  extras: looseArray(z.object({ heading: s, items: looseStrings(/\n/) })),
+  notes: looseStrings(/\n/),
 });
 
 const TAILOR_PROMPT = `You tailor a candidate's resume to one job, as an expert resume writer and ATS specialist.
@@ -370,7 +371,7 @@ export async function tailorLatex(
     `\nLATEX RESUME\n${input.latex.slice(0, 20000)}`,
   ].join("\n");
   const { value } = await completeParsed(ai, { system: LATEX_PROMPT, user, ...opts }, (raw) => {
-    const parsed = z.object({ latex: z.string().min(50), changes: z.array(z.string()).default([]) }).safeParse(parseJSONLoose(raw));
+    const parsed = z.object({ latex: z.string().min(50), changes: looseStrings(/\n/) }).safeParse(parseJSONLoose(raw));
     if (!parsed.success || !parsed.data.latex.includes("\\begin{document}")) {
       throw new ProviderError("The model didn't return a complete LaTeX document", null, "invalid_output");
     }

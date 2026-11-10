@@ -14,6 +14,16 @@ JobPilot (formerly Internova) helps students and early-career candidates find, e
 
 ---
 
+## Deployment
+See **[DEPLOY.md](DEPLOY.md)**: Supabase (database + sign-in), Google Cloud Run (Python API, Docker), Vercel (website + hosted AI) and the extension's production build.
+
+## Hosted AI (no API key needed)
+Signed-in users get AI through JobPilot's server: **20 actions per user per day**, shared across the website and the extension.
+- The limit lives in `ai_config.daily_limit` and is counted by `consume_ai_quota()` in Supabase. Users can't reset it.
+- If the quota can't be checked, AI doesn't run, which protects your API bill.
+- The extension calls `POST /api/ai` on the website with the user's Supabase token.
+- Users who add their own keys (Settings → Advanced) bypass the hosted service: their requests go straight from the browser to the provider, unlimited.
+
 ## AI providers and fallback
 
 Every AI feature can use **Groq, Google Gemini, OpenRouter and OpenAI**. Configure one or more; they're tried **in order**. If one fails (invalid key, rate limit, outage, unknown model, or a response that doesn't parse), the same request goes to the next.

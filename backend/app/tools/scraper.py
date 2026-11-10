@@ -13,7 +13,7 @@ class ScraperTool:
         content = ""
         try:
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
+                browser = await p.chromium.launch(headless=True, args=["--disable-dev-shm-usage"])  # small /dev/shm in containers
                 # Create a new context with a user agent to avoid bot detection
                 context = await browser.new_context(
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"

@@ -41,7 +41,10 @@ If you sign in with your email (a one-time code is emailed to you), the extensio
 
 AI keys, AI provider settings and pages you visit are never synced.
 
-## AI providers (optional)
+## JobPilot AI (hosted, when signed in)
+If you're signed in and haven't added your own API keys, AI features send the job description, your profile and your resume text to the JobPilot website's server. The server forwards them to its AI provider (Groq, Google Gemini or OpenRouter, in that order of fallback) and returns the result. The content isn't stored; the server keeps only a count of your AI actions per day to enforce the free daily limit.
+
+## AI providers with your own keys (optional)
 If you add API keys for Groq, Google Gemini, OpenAI and/or OpenRouter, then when you analyze a job, parse a resume, draft answers, write a cover letter or tailor your resume, the extension sends the job description, the application questions (for drafts), your profile and your resume text directly to the first provider in your order; if that call fails, the same request is sent to the next provider you configured. That provider's own privacy policy and terms apply, and usage is billed to your account with them. The key is used only by the extension's background service worker, is never exposed to web pages, and is never sent anywhere except the provider it belongs to.
 
 ## PDF generation

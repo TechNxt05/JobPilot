@@ -3,7 +3,7 @@ import type { JobPosting, JobRequirements } from "./job";
 import { normalizeSkillList } from "./job";
 import type { DegreeLevel } from "./resume";
 import type { CandidateProfile } from "./profile";
-import { completeParsed, parseJSONLoose, ProviderError, type AIConfig, type CompleteOptions } from "./providers";
+import { completeParsed, looseArray, looseStrings, looseText, parseJSONLoose, ProviderError, type AIConfig, type CompleteOptions } from "./providers";
 
 const nullableNumber = z.union([z.number(), z.string().transform((s) => (s.trim() === "" ? null : Number(s)))]).nullable().optional()
   .transform((v) => (typeof v === "number" && Number.isFinite(v) ? v : null));
@@ -193,7 +193,7 @@ export async function draftAnswers(
     `\nCANDIDATE PROFILE\n${ctx.profile.slice(0, 14000)}`,
   ].join("\n");
   const { value: answers } = await completeParsed(ai, { system: DRAFT_PROMPT, user, ...opts }, (raw) => {
-    const parsed = z.object({ answers: z.array(z.object({ id: z.string(), answer: z.string() })) }).safeParse(parseJSONLoose(raw));
+    const parsed = z.object({ answers: looseArray(z.object({ id: looseText(), answer: looseText() })) }).safeParse(parseJSONLoose(raw));
     if (!parsed.success) throw new ProviderError("The model's answer didn't match the expected format", null, "invalid_output");
     return parsed.data.answers;
   });
@@ -216,17 +216,18 @@ export async function draftAnswer(
 
 /* ------------------------------ AI resume → profile ------------------------------ */
 
-const s = z.string().nullish().transform((v) => (v ?? "").trim());
+const s = looseText();
+const list = looseText(", ");
 const ParsedResumeSchema = z.object({
   firstName: s, lastName: s, email: s, phone: s, city: s, country: s, linkedin: s, github: s, portfolio: s,
   headline: s, summary: s,
-  education: z.array(z.object({ school: s, degree: s, major: s, startYear: s, endYear: s, cgpa: s, cgpaScale: s })).default([]),
-  experience: z.array(z.object({ title: s, company: s, location: s, start: s, end: s, description: s })).default([]),
-  projects: z.array(z.object({ name: s, link: s, tech: s, description: s })).default([]),
-  skills: z.array(z.string()).default([]),
-  publications: z.array(z.object({ title: s, venue: s, year: s, link: s })).default([]),
-  certifications: z.array(z.string()).default([]),
-  achievements: z.array(z.string()).default([]),
+  education: looseArray(z.object({ school: s, degree: s, major: s, startYear: s, endYear: s, cgpa: s, cgpaScale: s })),
+  experience: looseArray(z.object({ title: s, company: s, location: s, start: s, end: s, description: s })),
+  projects: looseArray(z.object({ name: s, link: s, tech: list, description: s })),
+  skills: looseStrings(/,/),
+  publications: looseArray(z.object({ title: s, venue: s, year: s, link: s })),
+  certifications: looseStrings(/\n/),
+  achievements: looseStrings(/\n/),
 });
 
 const PARSE_PROMPT = `Extract a structured candidate profile from the resume text.

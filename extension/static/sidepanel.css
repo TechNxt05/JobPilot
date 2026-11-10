@@ -229,3 +229,6 @@ form.row input { flex: 1; min-width: 0; }
 .metrics > div { display: flex; flex-direction: column; background: var(--surface-2); border-radius: 8px; padding: 6px; }
 .mono { font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
 .pre { white-space: pre-wrap; }
+details.card > summary { cursor: pointer; }
+details.card[open] > summary { margin-bottom: 4px; }
+[hidden] { display: none !important; }

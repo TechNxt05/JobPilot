@@ -338,7 +338,7 @@ function QuestionRow({ row, keySet, aiBusy, onChange, onDraft, goTo }: {
         {row.aiDraftable && (keySet ? (
           <button className="btn small" onClick={onDraft} disabled={aiBusy}>{row.value ? "Redraft with AI" : "Draft with AI"}</button>
         ) : (
-          <button className="btn ghost small" onClick={() => goTo("settings")}>Add an AI key to draft answers</button>
+          <button className="btn ghost small" onClick={() => goTo("settings")}>Turn on AI to draft answers</button>
         ))}
         <label className="check small">
           <input type="checkbox" checked={row.remember} onChange={(e) => onChange({ remember: e.target.checked })} />

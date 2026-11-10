@@ -10,7 +10,7 @@ import {
   tailorLatex,
   tailorResume,
 } from "@internova/core";
-import { json, NO_AI, requireUser, serverAI } from "@/lib/ai";
+import { aiGate, json } from "@/lib/ai";
 import { clampText, loadUserData } from "@/lib/userData";
 
 export const maxDuration = 120;
@@ -25,11 +25,6 @@ const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
  * template is trimmed deterministically; user LaTeX gets one AI "shorten" pass.
  */
 export async function POST(req: Request) {
-  const auth = await requireUser();
-  if (!auth) return json({ error: "Sign in first" }, 401);
-  const ai = serverAI();
-  if (!ai) return NO_AI();
-
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const jobDescription = clampText(body.jobDescription, 15000);
   if (jobDescription.length < 80) return json({ error: "Paste the job description (at least a few sentences)." }, 400);
@@ -37,7 +32,10 @@ export async function POST(req: Request) {
   const userLatex = clampText(body.latex, 60000);
   if (userLatex && !userLatex.includes("\\begin{document}")) return json({ error: "Paste the full Overleaf main.tex (it needs \\begin{document})." }, 400);
 
-  const { profile, resumes } = await loadUserData(auth.supabase);
+  const gate = await aiGate(req);
+  if (!gate.ok) return gate.res;
+  const { ai } = gate;
+  const { profile, resumes } = await loadUserData(gate.supabase);
   if (!userLatex && !profile.firstName && !resumes.length) return json({ error: "Upload a resume or fill in your Profile first." }, 400);
   const input = { profile, resumeText: resumes[0]?.text ?? "", job };
 

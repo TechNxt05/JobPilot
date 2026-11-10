@@ -9,7 +9,9 @@ import {
   PROVIDERS,
   tailorLatex,
   tailorResume,
+  type ProviderConfig,
 } from "@internova/core";
+import { hostedAI, hostedConfigured, hostedQuota } from "./hosted";
 import type { Request } from "./messages";
 import { getProfile, getProviderConfig, getResumes } from "./storage";
 
@@ -21,11 +23,16 @@ chrome.runtime.onStartup.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 });
 
-/** Keys stay in the service worker; every AI call uses the user's providers in fallback order. */
-async function providers() {
-  const configs = await getProviderConfig();
-  if (!configs) throw new Error("No API key configured. Add one in Settings.");
-  return configs;
+/**
+ * Where AI runs:
+ *  1. The user's own keys (Settings → Advanced), if any: direct to the provider, unlimited.
+ *  2. Otherwise JobPilot hosted AI (signed-in users, daily quota) via the JobPilot website.
+ */
+async function runAI<T>(task: string, payload: Record<string, unknown>, local: (ai: ProviderConfig[]) => Promise<T>): Promise<T> {
+  const own = await getProviderConfig();
+  if (own) return local(own);
+  if (hostedConfigured) return hostedAI<T>(task, payload);
+  throw new Error("No AI configured. Add your own API key in Settings → Advanced.");
 }
 
 async function profileAndResume(resumeId?: string | null) {
@@ -37,35 +44,40 @@ async function profileAndResume(resumeId?: string | null) {
 
 async function handle(msg: Request) {
   switch (msg.type) {
-    case "analyze-ai":
-      return analyzeJob(msg.job, await getResumes(), await providers());
+    case "analyze-ai": {
+      const resumes = await getResumes();
+      return runAI("analyze", { job: msg.job, resumes }, (ai) => analyzeJob(msg.job, resumes, ai));
+    }
     case "draft-answers": {
-      const ai = await providers();
       const { profile, resumeText } = await profileAndResume();
-      return draftAnswers(ai, msg.questions, { profile: profileToContext(profile, resumeText), job: msg.job });
+      return runAI("draft-answers", { questions: msg.questions, job: msg.job, profile, resumeText },
+        (ai) => draftAnswers(ai, msg.questions, { profile: profileToContext(profile, resumeText), job: msg.job }));
     }
     case "parse-resume": {
-      const ai = await providers();
       const resume = (await getResumes()).find((r) => r.id === msg.resumeId);
       if (!resume) throw new Error("Resume not found");
-      return parseResumeWithAI(ai, resume.text);
+      return runAI("parse-resume", { text: resume.text }, (ai) => parseResumeWithAI(ai, resume.text));
     }
     case "cover-letter": {
-      const ai = await providers();
       const { profile, resumeText } = await profileAndResume(msg.resumeId);
-      return generateCoverLetter(ai, { profile, resumeText, job: msg.job, tone: msg.tone, words: msg.words });
+      return runAI("cover-letter", { job: msg.job, profile, resumeText, tone: msg.tone, words: msg.words },
+        (ai) => generateCoverLetter(ai, { profile, resumeText, job: msg.job, tone: msg.tone, words: msg.words }));
     }
     case "tailor-resume": {
-      const ai = await providers();
       const { profile, resumeText } = await profileAndResume(msg.resumeId);
-      return msg.latex
-        ? { mode: "latex" as const, ...(await tailorLatex(ai, { profile, resumeText, job: msg.job, latex: msg.latex, shorten: msg.shorten })) }
-        : { mode: "profile" as const, ...(await tailorResume(ai, { profile, resumeText, job: msg.job })) };
+      return runAI("tailor-resume", { job: msg.job, profile, resumeText, latex: msg.latex, shorten: msg.shorten }, async (ai) =>
+        msg.latex
+          ? { mode: "latex" as const, ...(await tailorLatex(ai, { profile, resumeText, job: msg.job, latex: msg.latex, shorten: msg.shorten })) }
+          : { mode: "profile" as const, ...(await tailorResume(ai, { profile, resumeText, job: msg.job })) });
     }
+    case "ai-quota":
+      return hostedQuota();
     case "test-key": {
-      // Test each configured provider on its own so the user sees which keys work
+      // Test each of the user's own keys separately so they see which work
+      const own = await getProviderConfig();
+      if (!own) throw new Error("No API keys saved.");
       const results = [];
-      for (const config of await providers()) {
+      for (const config of own) {
         const model = config.model || PROVIDERS[config.provider].defaultModel;
         try {
           await complete(config, { system: 'Reply with the JSON object {"ok": true}.', user: "Respond with JSON." });

@@ -1,5 +1,5 @@
 import { generateCoverLetter, researchCompany, type CoverLetterTone } from "@internova/core";
-import { json, NO_AI, requireUser, serverAI } from "@/lib/ai";
+import { aiGate, json } from "@/lib/ai";
 import { clampText, loadUserData } from "@/lib/userData";
 
 /**
@@ -7,11 +7,6 @@ import { clampText, loadUserData } from "@/lib/userData";
  * → CoverLetter (subject, greeting, paragraphs, closing, warnings, sources)
  */
 export async function POST(req: Request) {
-  const auth = await requireUser();
-  if (!auth) return json({ error: "Sign in first" }, 401);
-  const ai = serverAI();
-  if (!ai) return NO_AI();
-
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const company = clampText(body.company, 120);
   const role = clampText(body.role, 160);
@@ -20,7 +15,10 @@ export async function POST(req: Request) {
   const tone = (["professional", "enthusiastic", "concise"].includes(body.tone as string) ? body.tone : "professional") as CoverLetterTone;
   const words = Math.min(450, Math.max(120, Number(body.words) || 250));
 
-  const { profile, resumes } = await loadUserData(auth.supabase);
+  const gate = await aiGate(req);
+  if (!gate.ok) return gate.res;
+  const { ai, headers } = gate;
+  const { profile, resumes } = await loadUserData(gate.supabase);
   if (!profile.firstName && !resumes.length) return json({ error: "Upload a resume or fill in your Profile first. The letter is written from it." }, 400);
 
   const research = body.research && company
@@ -37,7 +35,7 @@ export async function POST(req: Request) {
       words,
       hiringManager: clampText(body.hiringManager, 80) || undefined,
     });
-    return json({ ...letter, name: [profile.firstName, profile.lastName].filter(Boolean).join(" ") });
+    return json({ ...letter, name: [profile.firstName, profile.lastName].filter(Boolean).join(" ") }, 200, headers);
   } catch (e) {
     return json({ error: (e as Error).message }, 502);
   }

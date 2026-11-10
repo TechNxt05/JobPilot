@@ -30,7 +30,10 @@ Contact details, section structure, recognised skills, quantified impact, action
 • Saves the answers you approve and suggests them for similar questions later
 • Never clicks Submit
 
-**Optional AI, using your own key**
+**AI included: no API key needed**
+Sign in for JobPilot AI: 20 free AI actions a day (cover letters, tailored resumes, answer drafts, smarter matching). Power users can add their own Groq, Gemini, OpenAI or OpenRouter key for unlimited use.
+
+**Or bring your own key**
 Connect Groq, Google Gemini, OpenAI or OpenRouter for sharper requirement extraction, resume suggestions and drafted answers. Requests go straight from your browser to the provider you choose. AI suggestions must quote real lines from your resume, and anything that doesn't is hidden.
 
 **Your full profile, filled from your resume**
@@ -53,6 +56,7 @@ Help a job seeker evaluate the job posting or application form in the current ta
 | `scripting` | When the user clicks Analyze or Scan, reads the job description or form fields from the current tab, and (only after the user approves) writes the chosen values into form fields. |
 | `activeTab` | Lets the user analyze the current tab on demand. |
 | Host permissions: job sites (LinkedIn, Indeed, Glassdoor, Greenhouse, Lever, Workday, Ashby, Internshala, Naukri, Wellfound, Unstop, Google Forms) | So Analyze and Autofill work on the major job boards and application systems without extra prompts. Nothing runs on these sites until the user clicks a button in the panel. |
+| Host permission: the JobPilot website (added at build time) | Hosted AI for signed-in users: sends the job description, profile and resume text to JobPilot's server, which returns the AI result. |
 | Host permissions: api.groq.com, api.openai.com, generativelanguage.googleapis.com, openrouter.ai | Only used when the user adds their own API key, to send the job text and their resume to the provider they chose. |
 | Optional host permissions: all sites | Requested at runtime, only if the user asks to analyze or autofill a page on a site not listed above. |
 

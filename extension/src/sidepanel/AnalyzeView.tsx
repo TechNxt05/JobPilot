@@ -133,7 +133,7 @@ export function AnalyzeView({ resumes, keySet, goTo }: Props) {
                 {selected.alignment.dimensions.map((d) => <DimensionRow key={d.id} d={d} />)}
                 <p className="hint">
                   Requirements read by {analysis.requirements.origin === "ai" ? "AI (scores still computed by rules)" : "keyword rules"}.
-                  {analysis.requirements.origin === "heuristic" && !keySet && " Add an API key in Settings for more accurate extraction."}
+                  {analysis.requirements.origin === "heuristic" && !keySet && " Turn on AI in Settings for more accurate extraction."}
                 </p>
               </div>
               <AIInsights analysis={analysis} aiBusy={aiBusy} keySet={keySet} goTo={goTo} />
@@ -242,8 +242,8 @@ function AIInsights({ analysis, aiBusy, keySet, goTo }: { analysis: JobAnalysis;
     return (
       <div className="card subtle">
         <h3>AI insights</h3>
-        <p className="muted">Add your own Groq, Gemini, OpenAI or OpenRouter key for an AI-written summary and resume suggestions. Requests go straight from your browser to the provider.</p>
-        <button className="btn" onClick={() => goTo("settings")}>Add API key</button>
+        <p className="muted">AI-written summary and resume suggestions. Sign in (Settings → Account) to use JobPilot AI, free for 20 actions a day, or add your own key under Settings → Advanced.</p>
+        <button className="btn" onClick={() => goTo("settings")}>Turn on AI</button>
       </div>
     );
   }

@@ -164,7 +164,7 @@ describe("providers", () => {
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://api.groq.com/openai/v1/chat/completions");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer gsk_test1234567890");
-    expect(JSON.parse(init.body as string).model).toBe("llama-3.3-70b-versatile");
+    expect(JSON.parse(init.body as string).model).toBe("openai/gpt-oss-120b");
   });
 
   it("uses the Gemini generateContent API with a header key", async () => {

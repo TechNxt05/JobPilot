@@ -51,7 +51,7 @@ export function CloudCard() {
         <p className="muted small">Optional. Sign in with a one-time email code to back up and sync your profile, resumes, saved answers and tracked jobs. Your AI key is never synced.</p>
         {!codeSent ? (
           <form className="row gap" onSubmit={(e) => { e.preventDefault(); run(async () => { await sendCode(email); setCodeSent(true); setMsg({ text: `We emailed a 6-digit code to ${email}.` }); }); }}>
-            <input type="email" required value={email} placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} aria-label="Email" />
+            <input type="email" required value={email} placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} aria-label="Account email" />
             <button className="btn primary" disabled={busy || !email}>Email me a code</button>
           </form>
         ) : (

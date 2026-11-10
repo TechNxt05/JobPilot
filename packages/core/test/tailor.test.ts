@@ -24,6 +24,7 @@ import {
   ungroundedNumbers,
   ungroundedSkills,
   ProviderError,
+  toConfigs,
 } from "../src";
 import { JD, RESUME } from "./fixtures";
 
@@ -237,5 +238,27 @@ describe("compileOnePage", () => {
     expect(calls).toBe(2);
     expect(out.pages).toBe(1);
     expect(out.resume.summary).toBe(""); // the one available trim was kept
+  });
+});
+
+describe("provider timeouts and placeholders", () => {
+  it("falls back when a provider hangs", async () => {
+    const fetchImpl = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes("groq")) {
+        return new Promise<Response>((_, reject) => init?.signal?.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+      }
+      return Promise.resolve(gemini({ ok: 1 }));
+    });
+    const res = await completeParsed(
+      [{ provider: "groq", apiKey: "gsk_hanging_key_123" }, { provider: "gemini", apiKey: "AIzaWorkingKey123" }],
+      { system: "s", user: "u", fetchImpl: fetchImpl as unknown as typeof fetch, timeoutMs: 50 },
+      (raw) => JSON.parse(raw),
+    );
+    expect(res.provider).toBe("gemini");
+    expect(res.attempts[0].error).toContain("timed out");
+  });
+
+  it("ignores placeholder keys from .env templates", () => {
+    expect(toConfigs([{ provider: "openai", apiKey: "your_openai_api_key" }, { provider: "groq", apiKey: "gsk_realLookingKey" }]).map((c) => c.provider)).toEqual(["groq"]);
   });
 });
