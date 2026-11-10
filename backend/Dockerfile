@@ -1,5 +1,5 @@
 # JobPilot API (FastAPI + LangGraph + Playwright) for Google Cloud Run
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -9,7 +9,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install -r requirements.txt \
+# libatomic1: Playwright's bundled Node needs it before it can install Chromium's own deps
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libatomic1 \
+ && pip install -r requirements.txt \
  && playwright install --with-deps chromium \
  && rm -rf /var/lib/apt/lists/*
 
