@@ -1,0 +1,40 @@
+# Cloud Build: build backend/ and deploy it to the Cloud Run service on every push to main.
+# Trigger settings: Type = Cloud Build configuration file, Location = Repository, file = cloudbuild.yaml
+substitutions:
+  _SERVICE: jobpilot-api
+  _REGION: asia-south1
+  _REPO: cloud-run-source-deploy
+  _IMAGE: ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${COMMIT_SHA}
+
+steps:
+  # Create the Artifact Registry repo the first time (no-op if it already exists)
+  - id: Repo
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - >
+        gcloud artifacts repositories describe ${_REPO} --location=${_REGION} >/dev/null 2>&1 ||
+        gcloud artifacts repositories create ${_REPO} --repository-format=docker --location=${_REGION}
+
+  - id: Build
+    name: gcr.io/cloud-builders/docker
+    dir: backend
+    args: [build, -t, '${_IMAGE}', -f, Dockerfile, .]
+
+  - id: Push
+    name: gcr.io/cloud-builders/docker
+    args: [push, '${_IMAGE}']
+
+  # Only swaps the image; env vars, memory, timeout etc. set in the console are kept
+  - id: Deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args: [run, deploy, '${_SERVICE}', --image, '${_IMAGE}', --region, '${_REGION}', --quiet]
+
+images: ['${_IMAGE}']
+timeout: 1800s
+options:
+  logging: CLOUD_LOGGING_ONLY
+  substitutionOption: ALLOW_LOOSE
+  dynamicSubstitutions: true
