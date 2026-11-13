@@ -46,6 +46,10 @@ export function latexToText(tex: string): string {
     .replace(/\\href\{[^}]*\}\{([^{}]*)\}/g, "$1")
     .replace(/\\(vspace|hspace|setlength|addtolength|titlespacing|newcommand|renewcommand)\*?(\{[^{}]*\}|\[[^\]]*\])*/g, " ")
     .replace(/\\textbackslash\{\}/g, "\\")
+    // Table column separators are gaps on the page, not text
+    .replace(/(^|[^\\])&/g, "$1 ")
+    .replace(/\$\\sim\$/g, "~")
+    .replace(/\\textbar\b\s*/g, "| ")
     .replace(/\\([&%$#_{}])/g, "$1")
     .replace(/\\(textbf|textit|emph|underline|textsc|small|large|Large|LARGE|huge|scshape|bfseries|itshape|normalsize|footnotesize|tiny)\b/g, "");
   // Unwrap remaining command arguments repeatedly: \cmd[opt]{arg}{arg2} → arg arg2
@@ -56,6 +60,10 @@ export function latexToText(tex: string): string {
   }
   return body
     .replace(/\\[a-zA-Z@]+\*?/g, " ")
+    // Adjacent macro arguments ({title}{date}) render apart, and LaTeX dashes render as dashes
+    .replace(/\}\s*\{/g, " ")
+    .replace(/---/g, "—")
+    .replace(/--/g, "–")
     .replace(/[{}]/g, "")
     .replace(/[ \t]+/g, " ")
     .split("\n")
