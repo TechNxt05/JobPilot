@@ -262,13 +262,19 @@ export interface TailorInput {
   /** Original resume text (for the "before" scores and as grounding source) */
   resumeText: string;
   job: Pick<JobPosting, "title" | "company" | "text">;
+  /** ATS-specific instructions (see atsTailorHints) */
+  atsHints?: string[];
 }
+
+const atsNotes = (hints?: string[]) =>
+  hints?.length ? `\nATS NOTES (follow these within the hard rules; never add facts)\n${hints.map((h) => `- ${h}`).join("\n")}` : "";
 
 /** Profile → job-tailored structured resume (no LaTeX given). */
 export async function tailorResume(ai: AIConfig, input: TailorInput, opts: Pick<CompleteOptions, "fetchImpl" | "signal"> = {}): Promise<{ resume: TailoredResume; report: TailorReport }> {
   const source = `${profileToContext(input.profile)}\n${input.resumeText}`;
   const user = [
     `JOB: ${input.job.title ?? ""} at ${input.job.company ?? ""}\n${input.job.text.slice(0, 7000)}`,
+    atsNotes(input.atsHints),
     `\n${indexedProfile(input.profile)}`,
     `\nCANDIDATE PROFILE\n${profileToContext(input.profile, input.resumeText).slice(0, 12000)}`,
   ].join("\n");
@@ -367,6 +373,7 @@ export async function tailorLatex(
   const user = [
     input.shorten ? "The previous version compiled to MORE THAN ONE PAGE. Shorten it to fit one page.\n" : "",
     `JOB: ${input.job.title ?? ""} at ${input.job.company ?? ""}\n${input.job.text.slice(0, 6000)}`,
+    atsNotes(input.atsHints),
     `\nCANDIDATE PROFILE\n${profileToContext(input.profile).slice(0, 6000)}`,
     `\nLATEX RESUME\n${input.latex.slice(0, 20000)}`,
   ].join("\n");

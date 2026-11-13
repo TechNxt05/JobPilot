@@ -13,3 +13,7 @@ export * from "./sync";
 export * from "./latex";
 export * from "./tailor";
 export * from "./coverletter";
+export * from "./discover";
+export * from "./contacts";
+export * from "./atsvendors";
+export * from "./jobpost";

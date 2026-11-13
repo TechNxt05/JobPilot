@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2, RefreshCw, Sparkles } from "lucide-react";
-import type { TailorReport } from "@internova/core";
+import { ATS_PROFILES, detectAtsVendor, type AtsVendor, type AtsVendorReport, type TailorReport } from "@internova/core";
 import { Button, Card, Input } from "@/components/ui";
+import { UPGRADE_JOB_KEY } from "@/lib/handoff";
 import { b64ToBlobUrl, compileToPdf, LatexActions } from "@/components/LatexActions";
 
 interface Result {
@@ -14,6 +15,7 @@ interface Result {
   pdf?: string;
   changes?: string[];
   warnings?: string[];
+  ats?: { before: AtsVendorReport | null; after: AtsVendorReport };
 }
 
 export default function ResumeUpgradePage() {
@@ -21,6 +23,25 @@ export default function ResumeUpgradePage() {
   const [role, setRole] = useState("");
   const [jd, setJd] = useState("");
   const [source, setSource] = useState("");
+  const [jobUrl, setJobUrl] = useState("");
+  const [ats, setAts] = useState<AtsVendor | "auto">("auto");
+
+  useEffect(() => {
+    Promise.resolve().then(() => {
+      try {
+        const raw = sessionStorage.getItem(UPGRADE_JOB_KEY);
+        if (!raw) return;
+        sessionStorage.removeItem(UPGRADE_JOB_KEY);
+        const j = JSON.parse(raw) as { company?: string; role?: string; text?: string; url?: string; ats?: AtsVendor };
+        if (j.company) setCompany(j.company);
+        if (j.role) setRole(j.role);
+        if (j.text) setJd(j.text);
+        if (j.url) setJobUrl(j.url);
+        if (j.ats) setAts(j.ats);
+      } catch { /* nothing handed over */ }
+    });
+  }, []);
+  const detected = detectAtsVendor(jobUrl);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
@@ -39,7 +60,7 @@ export default function ResumeUpgradePage() {
       const res = await fetch("/api/resume-upgrade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ company, role, jobDescription: jd, latex: source.trim() || undefined, compile: true }),
+        body: JSON.stringify({ company, role, jobDescription: jd, jobUrl: jobUrl.trim() || undefined, ats: ats === "auto" ? undefined : ats, latex: source.trim() || undefined, compile: true }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error([body.error ?? `Failed (${res.status})`, body.log].filter(Boolean).join("\n"));
@@ -85,6 +106,15 @@ export default function ResumeUpgradePage() {
         <form onSubmit={generate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <label className="flex flex-col gap-1 text-sm font-medium">Company<Input value={company} onChange={(e) => setCompany(e.target.value)} /></label>
           <label className="flex flex-col gap-1 text-sm font-medium">Role<Input value={role} onChange={(e) => setRole(e.target.value)} /></label>
+          <label className="flex flex-col gap-1 text-sm font-medium">Job link (optional)
+            <Input value={jobUrl} onChange={(e) => setJobUrl(e.target.value)} placeholder="https://… (used to detect the company’s ATS)" />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium">Applicant tracking system
+            <select className="h-10 rounded-md border border-input bg-background px-2 text-sm font-normal" value={ats} onChange={(e) => setAts(e.target.value as AtsVendor | "auto")}>
+              <option value="auto">Auto-detect{jobUrl ? `: ${ATS_PROFILES[detected].label}` : " (from the job link)"}</option>
+              {Object.values(ATS_PROFILES).filter((p) => p.id !== "unknown").map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
+          </label>
           <label className="flex flex-col gap-1 text-sm font-medium">Job description
             <textarea required rows={12} value={jd} onChange={(e) => setJd(e.target.value)} placeholder="Paste the full job description"
               className="rounded-md border border-input bg-background px-3 py-2 text-sm font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
@@ -114,6 +144,7 @@ export default function ResumeUpgradePage() {
               <div className="text-sm"><div className="text-muted-foreground">Words</div><div className="text-xl font-semibold">{r.words}</div></div>
             </Card>
 
+            {result.ats && <AtsCard before={result.ats.before} after={result.ats.after} />}
             {(result.warnings?.length ?? 0) > 0 && (
               <Card className="p-4 border-yellow-500/50">
                 <h3 className="font-semibold text-sm mb-2">Check these (not in your resume or profile)</h3>
@@ -178,5 +209,31 @@ function Metric({ label, before, after }: { label: string; before: number | null
         {before ?? "–"} <span className="text-muted-foreground">→</span> <span className={up ? "text-green-600" : ""}>{after ?? "–"}</span>
       </div>
     </div>
+  );
+}
+
+function AtsCard({ before, after }: { before: AtsVendorReport | null; after: AtsVendorReport }) {
+  const prev = new Map(before?.checks.map((c) => [c.id, c]) ?? []);
+  return (
+    <Card className="p-4 space-y-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="font-semibold text-sm">{after.label} check <span className="font-normal text-muted-foreground">({after.parsing} parser)</span></h3>
+        <span className="text-sm font-semibold">{before ? <>{before.score} <span className="text-muted-foreground">→</span> </> : null}<span className={before && after.score > before.score ? "text-green-600" : ""}>{after.score}</span></span>
+      </div>
+      <ul className="text-xs space-y-1">
+        {after.checks.map((c) => (
+          <li key={c.id} className="flex gap-2">
+            <span className={c.passed ? "text-green-600" : "text-yellow-700 dark:text-yellow-400"}>{c.passed ? "✓" : "!"}</span>
+            <span><strong>{c.label}</strong>{prev.get(c.id) && !prev.get(c.id)!.passed && c.passed ? " (fixed)" : ""}: {c.detail}</span>
+          </li>
+        ))}
+      </ul>
+      {after.missingKeywords.length > 0 && (
+        <p className="text-xs text-muted-foreground">Job keywords still missing (add only if true): {after.missingKeywords.join(", ")}</p>
+      )}
+      <details className="text-xs"><summary className="cursor-pointer font-medium">Tips for {after.label}</summary>
+        <ul className="list-disc pl-4 mt-1 space-y-0.5">{after.tips.map((t) => <li key={t}>{t}</li>)}</ul>
+      </details>
+    </Card>
   );
 }

@@ -7,8 +7,10 @@ import { supabase } from "@/lib/supabase/client";
 
 const LINKS = [
   { href: "/", label: "Chat" },
-  { href: "/internships", label: "Internships" },
+  { href: "/discover", label: "Discover" },
+  { href: "/internships", label: "Search" },
   { href: "/applications", label: "Jobs" },
+  { href: "/outreach", label: "Outreach" },
   { href: "/cover-letter", label: "Cover Letter" },
   { href: "/resume-upgrade", label: "Resume Upgrade" },
   { href: "/resume-score", label: "Resume Score" },
@@ -31,7 +33,7 @@ export function AuthNav() {
   return (
     <header className="absolute top-3 right-4 left-4 z-50 flex items-center gap-4 text-sm">
       <Link href="/" className="font-bold text-base mr-auto">JobPilot</Link>
-      <nav className="flex gap-3 font-medium">
+      <nav className="flex gap-3 font-medium overflow-x-auto">
         {LINKS.map((l) => (
           <Link key={l.href} href={l.href} className={`hover:underline ${pathname === l.href ? "text-primary" : ""}`}>{l.label}</Link>
         ))}

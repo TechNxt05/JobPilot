@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   analyzeJobLocal,
+  atsVendorCheck,
   type AlignmentReport,
   type Dimension,
   type JobAnalysis,
@@ -138,6 +139,7 @@ export function AnalyzeView({ resumes, keySet, goTo }: Props) {
               </div>
               <AIInsights analysis={analysis} aiBusy={aiBusy} keySet={keySet} goTo={goTo} />
               <ATSCard result={selected} />
+              <VendorAtsCard job={analysis.job} resumeText={resumes.find((r) => r.id === selected.resumeId)?.text ?? ""} />
               <ApplyKit job={analysis.job} resumeId={selected.resumeId} keySet={keySet} goTo={goTo} />
             </>
           ) : null}
@@ -296,6 +298,38 @@ function ATSCard({ result }: { result: ResumeResult }) {
         </ul>
       ) : (
         <p className="muted small">{failing.length ? `${failing.length} check${failing.length > 1 ? "s" : ""} to improve · details` : "All checks passed"}</p>
+      )}
+    </div>
+  );
+}
+
+/** How this job's own ATS (detected from the page URL) will read the selected resume. */
+function VendorAtsCard({ job, resumeText }: { job: JobPosting; resumeText: string }) {
+  const [open, setOpen] = useState(false);
+  const report = useMemo(() => (resumeText ? atsVendorCheck(resumeText, { title: job.title, text: job.text, url: job.url }) : null), [job, resumeText]);
+  if (!report) return null;
+  const failing = report.checks.filter((c) => !c.passed);
+  return (
+    <div className="card">
+      <button className="dim-head" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span><h3 className="inline">{report.vendor === "unknown" ? "ATS check" : `${report.label} check`}</h3> <span className="muted small">(this job · {report.parsing} parser)</span></span>
+        <span className={`dim-score ${band(report.score)}`}>{report.score}/100</span>
+      </button>
+      {open ? (
+        <>
+          <ul className="plain">
+            {report.checks.map((c) => (
+              <li key={c.id}>
+                <span className={`dot ${c.passed ? "met" : c.ratio > 0 ? "unknown" : "not_met"}`} aria-hidden /> {c.label}
+                <span className="muted small"> · {c.detail}</span>
+              </li>
+            ))}
+          </ul>
+          {report.missingKeywords.length > 0 && <p className="hint">Job keywords not in this resume (add only if true): {report.missingKeywords.join(", ")}</p>}
+          <ul className="small">{report.tips.map((t) => <li key={t}>{t}</li>)}</ul>
+        </>
+      ) : (
+        <p className="muted small">{failing.length ? `${failing.length} thing${failing.length > 1 ? "s" : ""} to fix for this ATS · details` : "Ready for this ATS"}</p>
       )}
     </div>
   );

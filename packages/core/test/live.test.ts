@@ -106,3 +106,18 @@ describe.skipIf(!LIVE)("live features (fallback chain)", () => {
     expect(text).toContain("\\begin{document}");
   }, T);
 });
+
+describe.skipIf(!LIVE)("live: hiring post → replies", () => {
+  it("extracts the post and writes grounded email / DM / note", async () => {
+    const { extractPostDetails, writePostReplies } = await import("../src");
+    const post = `Acme Cloud is hiring Software Engineer Interns (2026 batch) in Bengaluru!
+Work on our Python + AWS backend. Send your resume to talent@acmecloud.io with subject "SWE Intern - <Name> - <College>".
+Mention your notice period / availability. Or DM me. #hiring`;
+    const details = await extractPostDetails(ALL, post);
+    console.log("   details:", JSON.stringify(details));
+    expect(details.emails).toEqual(["talent@acmecloud.io"]);
+    const out = await writePostReplies(ALL, { profile, resumeText: RESUME, postText: post, details });
+    console.log(`   subject: ${out.emailSubject}\n   email: ${out.emailBody}\n   dm: ${out.dm}\n   note (${out.connectionNote.length}): ${out.connectionNote}\n   missing: ${out.missingInfo.join(", ")}\n   warnings: ${out.warnings.join(" | ")}`);
+    expect(out.connectionNote.length).toBeLessThanOrEqual(300);
+  }, T);
+});
