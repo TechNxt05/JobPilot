@@ -34,7 +34,7 @@ describe("rich profile from resume", () => {
   });
 
   it("parses projects, education, skills and a factual headline", () => {
-    expect(p.projects[0]).toMatchObject({ name: "Internova", description: expect.stringContaining("LangGraph") });
+    expect(p.projects[0]).toMatchObject({ name: "Internova — AI internship assistant", description: expect.stringContaining("LangGraph") });
     expect(p.projects[0].tech).toContain("LangGraph");
     expect(p.education[0]).toMatchObject({ school: "Indian Institute of Technology, Delhi", degree: "B.Tech", startYear: "2022", endYear: "2026", cgpa: "8.6" });
     expect(p.skills).toEqual(expect.arrayContaining(["Python", "React", "FastAPI", "PostgreSQL"]));

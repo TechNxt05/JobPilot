@@ -9,13 +9,13 @@ export function ResumesView({ resumes, onAdded }: { resumes: StoredResume[]; onA
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function add(text: string, fallbackName: string) {
+  async function add(text: string, fallbackName: string, links: string[] = []) {
     const clean = text.trim();
     if (clean.split(/\s+/).length < 50) {
       setError("That resume has very little text. If it's a scanned PDF, export a text-based PDF or paste the text instead.");
       return;
     }
-    const resume = { id: crypto.randomUUID(), name: name.trim() || fallbackName, text: clean, addedAt: Date.now() };
+    const resume = { id: crypto.randomUUID(), name: name.trim() || fallbackName, text: clean, addedAt: Date.now(), ...(links.length ? { links } : {}) };
     await saveResume(resume);
     onAdded?.(resume);
     setName("");
@@ -31,7 +31,8 @@ export function ResumesView({ resumes, onAdded }: { resumes: StoredResume[]; onA
     setBusy(true);
     setError(null);
     try {
-      await add(await pdfToText(file), file.name.replace(/\.pdf$/i, ""));
+      const pdf = await pdfToText(file);
+      await add(pdf.text, file.name.replace(/\.pdf$/i, ""), pdf.links);
     } catch {
       setError("Couldn't read that PDF.");
     } finally {

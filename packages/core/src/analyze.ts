@@ -10,6 +10,8 @@ export interface StoredResume {
   name: string;
   text: string;
   addedAt: number;
+  /** Clickable links found in the PDF (LinkedIn, GitHub, projects, papers); not part of the text */
+  links?: string[];
   /** Last edit (sync); defaults to addedAt */
   updatedAt?: number;
 }

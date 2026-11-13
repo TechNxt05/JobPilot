@@ -58,7 +58,7 @@ export function ProfileView({ resumes, keySet }: { resumes: StoredResume[]; keyS
 
   /** New resume → fill empty profile fields (rules now, AI after if a key is set). Never overwrites user edits. */
   async function onResumeAdded(r: StoredResume) {
-    const filled = mergeProfile(latest.current, profileFromResume(r.text));
+    const filled = mergeProfile(latest.current, profileFromResume(r.text, r.links));
     await persist(filled);
     setStatus({ kind: "ok", text: `Filled your profile from “${r.name}”. Review each section below.` });
     if (!keySet) return;

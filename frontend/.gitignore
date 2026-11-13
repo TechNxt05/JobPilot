@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Keep the env template (it has no secrets)
 !.env.local.example
+
+# Copied from pdfjs-dist at build time
+/public/pdf.worker.min.mjs

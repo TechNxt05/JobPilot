@@ -93,7 +93,7 @@ export function AutofillView({ resumes, keySet, goTo }: Props) {
           setError("Upload a resume in Profile first. Autofill uses your profile details.");
           return;
         }
-        profile = { ...EMPTY_PROFILE, ...profileFromResume(resumes[0].text) };
+        profile = { ...EMPTY_PROFILE, ...profileFromResume(resumes[0].text, resumes[0].links) };
       }
       const plan: Row[] = planAutofill(fields, profile, await getAnswers()).map((p) => ({ ...p, remember: true }));
       setRows(plan);

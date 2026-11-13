@@ -1,5 +1,6 @@
 import { analyzeResume, estimateExperienceMonths, parseCGPA } from "./resume";
-import { findSkills, skillCategory } from "./skills";
+import { classifyLinks, linkForProject } from "./pdftext";
+import { canonicalSkill, findSkills, skillCategory } from "./skills";
 
 /* ------------------------------------------------------------------ */
 /* Rich candidate profile (v2). Everything the user can edit in the    */
@@ -195,13 +196,13 @@ function parseEducation(lines: string[]): EducationEntry[] {
     const l = stripBullet(raw);
     if (SCHOOL_RE.test(l) && !DEGREE_TOKEN.test(l)) {
       const e = cur && !cur.school ? cur : start();
-      e.school = l.split(/\s[|–—]\s|\s-\s|,\s*(?=\d)/)[0].replace(/\s*\(.*?\)\s*$/, "").trim();
+      e.school = l.split(/\s[|–—]\s|\s-\s|,\s*(?=\d)/)[0].replace(/\s*\(.*?\)\s*$/, "").replace(/\s+((?:jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\.?\s+)?(19|20)\d{2}(\s*[–—-]\s*((19|20)\d{2}|present|current))?\s*$/i, "").trim();
     }
     const deg = l.match(DEGREE_TOKEN);
     if (deg) {
       const e: EducationEntry = cur && !cur.degree ? cur : start();
       e.degree = deg[0].replace(/\s+/g, " ");
-      const major = l.match(/\b(?:in|of)\s+([A-Z][A-Za-z&,\s]+?)(?:\s*[,|(–—-]|\s+\d|$)/);
+      const major = l.match(/\b(?:in|of)\s+([A-Z][A-Za-z&,\s]+?)(?:\s*[,|(–—:-]|\s+\d|\s+(?:CGPA|GPA|CPI|SGPA|Percentage|Grade)\b|$)/);
       if (major && !/^(Technology|Science|Engineering|Arts|Commerce)$/i.test(major[1].trim())) e.major = major[1].trim();
       if (SCHOOL_RE.test(l) && !e.school) e.school = l.replace(deg[0], "").replace(/^[\s,|–—-]+|[\s,|–—-]+$/g, "").split(/,\s*(?=\d)/)[0].trim();
     }
@@ -217,26 +218,54 @@ function parseEducation(lines: string[]): EducationEntry[] {
   return entries.filter((e) => e.school || e.degree);
 }
 
-function splitTitleCompany(header: string): { title: string; company: string } {
-  const noDates = header.replace(DATE_RANGE, "").replace(/[|,–—-]\s*$/, "").trim();
+/**
+ * PDF text breaks long bullets across lines. Join a line onto the previous bullet when it continues it:
+ * it starts lowercase or with "(", or the previous line didn't end a sentence.
+ */
+export function joinWrappedLines(lines: string[]): string[] {
+  const out: string[] = [];
+  let inBullet = false;
+  for (const raw of lines) {
+    const l = raw.trim();
+    if (!l) continue;
+    if (BULLET.test(l)) { out.push(l); inBullet = true; continue; }
+    const prev = out[out.length - 1];
+    const continues = inBullet && prev !== undefined && (/^[a-z(]/.test(l) || !/[.!?:)]$/.test(prev)) && !DATE_RANGE.test(l) && !/\b(19|20)\d{2}\s*$/.test(l);
+    if (continues) out[out.length - 1] = `${prev} ${l}`;
+    else { out.push(l); inBullet = false; }
+  }
+  return out;
+}
+
+const ROLE_WORDS = /\b(intern(ship)?|engineer|developer|analyst|manager|scientist|research(er)?|designer|consultant|associate|trainee|assistant|fellow|lead|architect|specialist|officer|founder|co-?founder|sde|swe|member|volunteer|head|coordinator)\b/i;
+
+function splitTitleCompany(header: string): { title: string; company: string; location: string } {
+  let noDates = header.replace(DATE_RANGE, "").replace(/[|,–—-]\s*$/, "").trim();
+  const loc = noDates.match(/\((remote|hybrid|on-?site|[A-Z][a-z]+(?:,\s*[A-Z][a-z]+)?)\)\s*$/);
+  const location = loc && !/^[A-Z]{2,}$/.test(loc[1]) ? loc[1] : "";
+  if (location) noDates = noDates.slice(0, loc!.index).trim();
   const at = noDates.match(/^(.+?)\s+at\s+(.+)$/i);
-  if (at) return { title: at[1].trim(), company: at[2].trim() };
+  if (at) return { title: at[1].trim(), company: at[2].trim(), location };
   const parts = noDates.split(/\s[|–—-]\s|,\s/).map((s) => s.trim()).filter(Boolean);
-  return { title: parts[0] ?? "", company: parts[1] ?? "" };
+  const [a = "", b = ""] = parts;
+  // "Company — Title" is as common as "Title — Company": the side with role words is the title
+  const ROLE_END = /\b(intern(ship)?|engineer|developer|analyst|manager|scientist|researcher|designer|consultant|associate|trainee|assistant|fellow|lead|architect|specialist|officer|founder)\s*$/i;
+  if (b && ((ROLE_WORDS.test(b) && !ROLE_WORDS.test(a)) || (ROLE_END.test(b) && !ROLE_END.test(a)))) return { title: b, company: a, location };
+  return { title: a, company: b, location };
 }
 
 function parseExperience(lines: string[]): ExperienceEntry[] {
   const out: ExperienceEntry[] = [];
   let cur: ExperienceEntry | null = null;
-  for (const raw of lines) {
+  for (const raw of joinWrappedLines(lines)) {
     if (BULLET.test(raw)) {
       if (cur) cur.description += (cur.description ? "\n" : "") + stripBullet(raw);
       continue;
     }
     const range = raw.match(DATE_RANGE);
     if (range || !cur) {
-      const { title, company } = splitTitleCompany(raw);
-      cur = { ...EMPTY_EXPERIENCE, title, company, start: range?.[1] ?? "", end: range ? (/^(current|now|ongoing)$/i.test(range[2]) ? "Present" : range[2].replace(/^present$/i, "Present")) : "" };
+      const { title, company, location } = splitTitleCompany(raw);
+      cur = { ...EMPTY_EXPERIENCE, title, company, location, start: range?.[1] ?? "", end: range ? (/^(current|now|ongoing)$/i.test(range[2]) ? "Present" : range[2].replace(/^present$/i, "Present")) : "" };
       out.push(cur);
     } else if (cur && !cur.company) {
       cur.company = raw.trim();
@@ -247,22 +276,78 @@ function parseExperience(lines: string[]): ExperienceEntry[] {
   return out.filter((e) => e.title || e.company);
 }
 
-function parseProjects(lines: string[]): ProjectEntry[] {
+function parseProjects(lines: string[], linkPool: string[] = []): ProjectEntry[] {
   const out: ProjectEntry[] = [];
   let cur: ProjectEntry | null = null;
-  for (const raw of lines) {
+  for (const raw of joinWrappedLines(lines)) {
     const url = raw.match(URL_RE)?.[0];
     if (!BULLET.test(raw) || !cur) {
-      const [name, ...rest] = stripBullet(raw).split(/\s[|–—-]\s/);
-      cur = { ...EMPTY_PROJECT, name: name.replace(URL_RE, "").trim(), description: rest.join(" — ").replace(URL_RE, "").trim() };
+      // "Name - Subtitle  Tech, Stack 2026": drop the trailing date, split name from the tech list
+      const head = stripBullet(raw).replace(URL_RE, "").replace(DATE_RANGE, "").replace(/\s+((?:jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\.?\s+)?(19|20)\d{2}\s*$/i, "").trim();
+      const dot = head.split(/\s·\s/);
+      const techStart = dot.length > 1 ? -1 : head.search(/\s(?=[A-Z][\w.+#]*,\s)/);
+      const name = (dot.length > 1 ? dot[0] : techStart > 0 ? head.slice(0, techStart) : head).replace(/\s*·\s*$/, "").trim();
+      const tech = (dot.length > 1 ? dot.slice(1).join(", ") : techStart > 0 ? head.slice(techStart) : "").trim();
+      cur = { ...EMPTY_PROJECT, name, tech, description: "" };
       out.push(cur);
     } else {
       cur.description += (cur.description ? "\n" : "") + stripBullet(raw);
     }
     if (url && cur && !cur.link) cur.link = withScheme(url);
   }
-  for (const p of out) p.tech = [...findSkills(`${p.name}\n${p.description}`).keys()].join(", ");
+  for (const p of out) {
+    if (!p.link) {
+      const l = linkForProject(p.name, linkPool);
+      p.link = l.live || l.repo;
+      if (l.live && l.repo) p.description = `${p.description}${p.description ? "\n" : ""}Code: ${l.repo}`;
+    }
+    if (!p.tech) p.tech = [...findSkills(`${p.name}\n${p.description}`).keys()].join(", ");
+  }
   return out.filter((p) => p.name);
+}
+
+/** "IEEE ICAIIC 2026, Tokyo — Paper Title  2026" headers; bullets under them are summaries. */
+function parsePublications(lines: string[], paperLinks: string[]): PublicationEntry[] {
+  const out: PublicationEntry[] = [];
+  for (const raw of joinWrappedLines(lines)) {
+    if (BULLET.test(raw)) continue;
+    const l = raw.replace(URL_RE, "").replace(/\s·\s/g, " ").trim();
+    if (l.length < 12) continue;
+    const year = l.match(/\b(19|20)\d{2}\b(?!.*\b(19|20)\d{2}\b)/)?.[0] ?? "";
+    const body = l.replace(/\s+((?:jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\.?\s+)?(19|20)\d{2}\s*$/i, "").trim();
+    const [left, ...right] = body.split(/\s[–—]\s|\s-\s/);
+    const venueFirst = right.length > 0 && /\b(ieee|acm|springer|elsevier|conference|journal|proceedings|workshop|symposium|arxiv|[A-Z]{3,}\s?(19|20)\d{2})\b/i.test(left);
+    out.push({
+      ...EMPTY_PUBLICATION,
+      title: (venueFirst ? right.join(" — ") : body).trim(),
+      venue: venueFirst ? left.trim() : "",
+      year,
+      link: withScheme(raw.match(URL_RE)?.[0]) || paperLinks[out.length] || "",
+    });
+  }
+  return out;
+}
+
+const INDIAN_STATES = /^(andhra pradesh|arunachal pradesh|assam|bihar|chhattisgarh|goa|gujarat|haryana|himachal pradesh|jharkhand|karnataka|kerala|madhya pradesh|maharashtra|manipur|meghalaya|mizoram|nagaland|odisha|punjab|rajasthan|sikkim|tamil nadu|telangana|tripura|uttar pradesh|uttarakhand|west bengal|delhi|new delhi|jammu (and|&) kashmir|ladakh|puducherry|chandigarh)$/i;
+
+/** First lines often hold "Name City, State" or "Name | City": split the name from a trailing location. */
+function nameAndLocation(lines: string[]): { first: string; last: string; city: string; region: string } | null {
+  for (const l of lines.slice(0, 4)) {
+    if (/@|resume|curriculum|https?:|\d{5,}/i.test(l)) continue;
+    const [before, region = ""] = l.split(/,\s*/, 2);
+    const words = before.replace(/[|·•]/g, " ").trim().split(/\s+/);
+    if (!words.every((w) => /^[A-Z][A-Za-z.'-]*$/.test(w))) continue;
+    if (!region) {
+      if (words.length >= 2 && words.length <= 4) return { first: words[0], last: words.slice(1).join(" "), city: "", region: "" };
+      continue;
+    }
+    // "Name Name City, Region": the city is the last word (two for "New Delhi", "Navi Mumbai")
+    const cityWords = /^(new|navi|greater|north|south|east|west)$/i.test(words[words.length - 2] ?? "") ? 2 : 1;
+    const name = words.slice(0, words.length - cityWords);
+    if (name.length < 2 || name.length > 4) continue;
+    return { first: name[0], last: name.slice(1).join(" "), city: words.slice(-cityWords).join(" "), region: region.trim() };
+  }
+  return null;
 }
 
 function parseSkillsSection(lines: string[]): string[] {
@@ -281,37 +366,40 @@ function parseSkillsSection(lines: string[]): string[] {
  * Best-effort profile from resume text, using rules only (instant, no network).
  * The user reviews and edits it; an optional AI pass can fill what's still empty.
  */
-export function profileFromResume(text: string): CandidateProfile {
+export function profileFromResume(text: string, pdfLinks: string[] = []): CandidateProfile {
   const r = analyzeResume(text);
   const p: CandidateProfile = { ...EMPTY_PROFILE, answers: {} };
+  const links = classifyLinks(pdfLinks);
 
-  const nameLine = r.lines.slice(0, 4).find((l) => /^[A-Za-z][A-Za-z.'-]*(\s+[A-Za-z][A-Za-z.'-]*){1,3}$/.test(l) && !/@|resume|curriculum/i.test(l));
-  if (nameLine) {
-    const parts = nameLine.split(/\s+/);
-    p.firstName = parts[0];
-    p.lastName = parts.slice(1).join(" ");
+  const who = nameAndLocation(r.lines);
+  if (who) {
+    p.firstName = who.first;
+    p.lastName = who.last;
+    p.city = who.city;
+    if (INDIAN_STATES.test(who.region)) p.country = "India";
+    else if (who.region && who.region.split(" ").length <= 3) p.country = who.region;
   }
   p.email = r.contact.email ?? "";
   p.phone = r.contact.phone ?? "";
-  p.linkedin = withScheme(r.contact.linkedin);
-  p.github = withScheme(r.contact.github);
+  p.linkedin = withScheme(r.contact.linkedin) || links.linkedin;
+  p.github = withScheme(r.contact.github) || links.github;
   const site = text.match(/\b(?:https?:\/\/)?(?:[a-z0-9-]+\.)+(?:dev|me|io|vercel\.app|netlify\.app|github\.io)\b\/?\S*/i)?.[0];
   if (site && !/linkedin|github\.com/i.test(site)) p.portfolio = withScheme(site);
+  p.portfolio ||= links.portfolio;
+  if (links.scholar) p.additionalInfo = `Google Scholar: ${links.scholar}`;
 
   p.education = parseEducation(r.sections.education ?? r.lines.filter((l) => DEGREE_TOKEN.test(l) || SCHOOL_RE.test(l)));
   p.experience = parseExperience(r.sections.experience ?? []);
-  p.projects = parseProjects(r.sections.projects ?? []);
+  p.projects = parseProjects(r.sections.projects ?? [], links.projects);
   p.summary = (r.sections.summary ?? []).map(stripBullet).join(" ").trim();
-  p.publications = (r.sections.publications ?? []).filter((l) => l.length > 10).map((l) => {
-    const t = stripBullet(l);
-    return { ...EMPTY_PUBLICATION, title: t.replace(URL_RE, "").trim(), year: t.match(/\b(19|20)\d{2}\b/)?.[0] ?? "", link: withScheme(t.match(URL_RE)?.[0]) };
-  });
+  p.publications = parsePublications(r.sections.publications ?? [], links.papers);
   p.certifications = (r.sections.certifications ?? []).map(stripBullet).filter(Boolean);
   p.achievements = (r.sections.achievements ?? []).map(stripBullet).filter(Boolean);
 
   // Skills: recognised taxonomy skills first, then anything else listed in the Skills section
   const seen = new Set<string>();
-  for (const s of [...r.skills.keys(), ...parseSkillsSection(r.sections.skills ?? [])]) {
+  for (const raw of [...r.skills.keys(), ...parseSkillsSection(r.sections.skills ?? [])]) {
+    const s = canonicalSkill(raw);
     if (!seen.has(s.toLowerCase())) { seen.add(s.toLowerCase()); p.skills.push(s); }
   }
 

@@ -20,7 +20,7 @@ const SECTION_HEADERS: [SectionName, RegExp][] = [
   ["certifications", /^(certifications?|licenses?(\s*(&|and)\s*certifications?)?|courses?(\s*(&|and)\s*certifications?)?)$/i],
   ["achievements", /^(achievements?|awards?(\s*(&|and)\s*\w+)?|honou?rs?(\s*(&|and)\s*awards?)?|accomplishments)$/i],
   ["leadership", /^(leadership|positions?\s+of\s+responsibility|extra[-\s]?curricular(\s+activities)?|volunteering|activities)$/i],
-  ["publications", /^(publications?|research)$/i],
+  ["publications", /^((research|selected|academic|conference|journal)\s+)?(publications?|papers?)(\s*(&|and)\s*\w+)?$|^research(\s+(work|experience|papers?))?$|^papers?\s*(&|and)\s*publications?$/i],
 ];
 
 export interface CGPA {

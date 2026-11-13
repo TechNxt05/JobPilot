@@ -11,6 +11,7 @@ import {
   EMPTY_PROFILE,
   EMPTY_PROJECT,
   EMPTY_PUBLICATION,
+  isProfileEmpty,
   knownAnswer,
   mergeProfile,
   profileFromResume,
@@ -20,7 +21,7 @@ import {
   type StoredResume,
 } from "@internova/core";
 import { Button, Card, Input } from "@/components/ui";
-import { apiFetch } from "@/lib/api";
+import { readResumePdf } from "@/lib/pdf";
 import { deleteResume, listResumes, loadProfile, saveProfile, saveResume } from "@/lib/data";
 
 type Status = { kind: "info" | "ok" | "error"; text: string } | null;
@@ -64,16 +65,22 @@ export default function ProfilePage() {
     setUploading(true);
     setStatus({ kind: "info", text: `Reading ${file.name}…` });
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await apiFetch("/resume/extract", { method: "POST", body: form });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.detail ?? `Upload failed (${res.status})`);
-      const resume = await saveResume({ id: crypto.randomUUID(), name: file.name.replace(/\.pdf$/i, ""), text: body.text, addedAt: Date.now() }, file);
+      if (file.size > 5 * 1024 * 1024) throw new Error("Resume must be 5 MB or smaller.");
+      // Read in the browser: keeps word spacing and the PDF's links (LinkedIn, GitHub, projects, papers)
+      const pdf = await readResumePdf(file).catch(() => {
+        throw new Error("Couldn't read that PDF. Export it again as a text PDF (not a scan) and retry.");
+      });
+      if (pdf.text.split(/\s+/).length < 50) throw new Error("That PDF has very little text. If it's a scan or an image, export a text-based PDF.");
+      const resume = await saveResume({ id: crypto.randomUUID(), name: file.name.replace(/\.pdf$/i, ""), text: pdf.text, addedAt: Date.now(), ...(pdf.links.length ? { links: pdf.links } : {}) }, file);
       setResumes((r) => [...r, resume]);
 
-      // Fill empty profile fields: rules first, then an optional AI pass (never overwrites your edits)
-      await persist(mergeProfile(latest.current, profileFromResume(resume.text)));
+      // Fill empty profile fields: rules first, then an optional AI pass (never overwrites your edits).
+      // If the profile already has data (e.g. from an older, badly read upload), offer to replace it instead.
+      const parsed = profileFromResume(resume.text, resume.links);
+      const replace = !isProfileEmpty(latest.current) &&
+        confirm("Replace your profile's details, education, experience, projects, publications and skills with what's in this resume?\n\nYour saved answers and additional information are kept. Choose Cancel to only fill empty fields.");
+      const base = replace ? { ...EMPTY_PROFILE, answers: latest.current.answers, additionalInfo: latest.current.additionalInfo, updatedAt: latest.current.updatedAt } : latest.current;
+      await persist(mergeProfile(base, parsed));
       setStatus({ kind: "info", text: `Filled your profile from “${resume.name}”. AI is checking for anything the rules missed…` });
       const ai = await fetch("/api/parse-resume", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: resume.text }) });
       if (ai.ok) {

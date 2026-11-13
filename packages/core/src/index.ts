@@ -17,3 +17,4 @@ export * from "./discover";
 export * from "./contacts";
 export * from "./atsvendors";
 export * from "./jobpost";
+export * from "./pdftext";
