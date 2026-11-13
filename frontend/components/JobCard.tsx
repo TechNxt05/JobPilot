@@ -62,26 +62,26 @@ export const JobCard: React.FC<JobCardProps> = ({ job, resumeText }) => {
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return "text-green-600 bg-green-50 border-green-200";
-    if (score >= 50) return "text-yellow-600 bg-yellow-50 border-yellow-200";
-    return "text-red-600 bg-red-50 border-red-200";
+    if (score >= 80) return "text-ok";
+    if (score >= 50) return "text-warn";
+    return "text-destructive";
   };
 
   return (
-    <Card className="p-4 hover:shadow-md transition-shadow">
+    <Card className="p-4">
       <div className="flex justify-between items-start">
         <div>
           <h3 className="font-bold text-lg">{job.role}</h3>
-          <p className="text-gray-600 font-medium">{job.company}</p>
+          <p className="text-muted-foreground font-medium">{job.company}</p>
         </div>
         {matchResult && (
-          <div className={`px-3 py-1 rounded-full border text-sm font-bold ${getScoreColor(matchResult.score)}`}>
+          <div className={`px-3 py-1 rounded-[3px] border text-sm font-bold ${getScoreColor(matchResult.score)}`}>
             {matchResult.score}% Match
           </div>
         )}
       </div>
 
-      <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-500">
+      <div className="flex flex-wrap gap-4 mt-3 text-sm text-muted-foreground">
         <div className="flex items-center gap-1">
           <MapPin size={14} /> {job.location}
         </div>
@@ -117,17 +117,17 @@ export const JobCard: React.FC<JobCardProps> = ({ job, resumeText }) => {
       </div>
 
       {expanded && (
-        <div className="mt-4 pt-4 border-t border-gray-100 space-y-4">
+        <div className="mt-4 pt-4 border-t border-border space-y-4">
           <div>
             <h4 className="font-semibold text-sm mb-1">Description</h4>
-            <p className="text-sm text-gray-600">{job.description}</p>
+            <p className="text-sm text-muted-foreground">{job.description}</p>
           </div>
           
           <div>
             <h4 className="font-semibold text-sm mb-1">Skills Required</h4>
             <div className="flex flex-wrap gap-1">
               {job.skills_required.map((skill, i) => (
-                <span key={i} className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-700">
+                <span key={i} className="text-xs chip px-2 py-1 rounded-[3px]">
                   {skill}
                 </span>
               ))}
@@ -135,23 +135,23 @@ export const JobCard: React.FC<JobCardProps> = ({ job, resumeText }) => {
           </div>
 
           {matchResult && (
-            <div className="bg-slate-50 p-3 rounded-md space-y-3">
+            <div className="bg-slate-50 p-3 rounded-[3px] space-y-3">
               <div>
-                <h4 className="font-semibold text-sm text-green-700 flex items-center gap-1">
+                <h4 className="font-semibold text-sm text-ok flex items-center gap-1">
                   <CheckCircle size={14} /> Strengths
                 </h4>
-                <ul className="list-disc list-inside text-xs text-gray-600">
+                <ul className="list-disc list-inside text-xs text-muted-foreground">
                   {matchResult.strengths.map((s, i) => <li key={i}>{s}</li>)}
                 </ul>
               </div>
               
               <div>
-                <h4 className="font-semibold text-sm text-red-700 flex items-center gap-1">
+                <h4 className="font-semibold text-sm text-destructive flex items-center gap-1">
                   <XCircle size={14} /> Missing Skills
                 </h4>
                 <div className="flex flex-wrap gap-1 mt-1">
                     {matchResult.missing_keywords.map((k, i) => (
-                        <span key={i} className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded border border-red-200">
+                        <span key={i} className="text-xs text-destructive px-2 py-0.5 rounded border">
                             {k}
                         </span>
                     ))}
@@ -159,8 +159,8 @@ export const JobCard: React.FC<JobCardProps> = ({ job, resumeText }) => {
               </div>
 
               <div>
-                 <h4 className="font-semibold text-sm text-blue-700 mb-1">💡 Improvement Tips</h4>
-                 <ul className="list-disc list-inside text-xs text-gray-600">
+                 <h4 className="font-semibold text-sm text-primary mb-1">💡 Improvement Tips</h4>
+                 <ul className="list-disc list-inside text-xs text-muted-foreground">
                   {matchResult.improvement_tips.map((t, i) => <li key={i}>{t}</li>)}
                 </ul>
               </div>

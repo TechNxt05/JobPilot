@@ -24,7 +24,7 @@ interface Result {
 }
 
 const METHOD: Record<PostDetails["applyMethod"], string> = { email: "Email", dm: "LinkedIn DM", link: "Apply link", comment: "Comment on the post", unknown: "Not stated" };
-const area = "w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const area = "w-full rounded-[3px] border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export default function JobPostPage() {
   const router = useRouter();
@@ -87,9 +87,9 @@ export default function JobPostPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 pt-16 max-w-6xl space-y-6">
+    <div className="container mx-auto p-6 max-w-6xl space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Reply to a hiring post</h1>
+        <h1 className="text-4xl">Reply to a hiring post</h1>
         <p className="text-muted-foreground">
           Paste a LinkedIn (or any) hiring post. JobPilot finds the company&apos;s official posting if there is one, gathers context, checks your resume for where it&apos;ll be read,
           and drafts an email, a DM and a connection note from your profile. Nothing is sent automatically. <Link className="underline" href="/outreach">Back to contacts</Link>
@@ -126,7 +126,7 @@ export default function JobPostPage() {
               <Fact k="Subject" v={res.details.subjectFormat} />
               <Fact k="Include" v={res.details.include.join(", ")} />
               <Fact k="Deadline" v={res.details.deadline} />
-              {res.details.skills.length > 0 && <div className="flex flex-wrap gap-1 pt-1">{res.details.skills.map((s) => <span key={s} className="text-xs rounded-full border border-border px-2 py-0.5">{s}</span>)}</div>}
+              {res.details.skills.length > 0 && <div className="flex flex-wrap gap-1 pt-1">{res.details.skills.map((s) => <span key={s} className="text-xs rounded-[3px] border border-border px-2 py-0.5">{s}</span>)}</div>}
               <div className="flex flex-wrap gap-2 pt-2">
                 <Button size="sm" variant="outline" onClick={track} disabled={saved}>{saved ? <><Check size={14} className="mr-1" /> In tracker</> : <><Plus size={14} className="mr-1" /> Save to tracker</>}</Button>
                 <Button size="sm" variant="outline" onClick={tailorResume}><FileText size={14} className="mr-1" /> Tailor resume for this</Button>
@@ -152,7 +152,7 @@ export default function JobPostPage() {
               <Card className="p-4 space-y-2 text-sm">
                 <div className="flex justify-between gap-2"><h2 className="font-semibold">Resume check: {res.ats.label}</h2><span className="font-semibold">{res.ats.score}/100</span></div>
                 <ul className="text-xs space-y-1">
-                  {res.ats.checks.filter((c) => !c.passed).map((c) => <li key={c.id} className="flex gap-1"><AlertTriangle size={13} className="mt-0.5 shrink-0 text-yellow-600" /><span><strong>{c.label}:</strong> {c.detail}</span></li>)}
+                  {res.ats.checks.filter((c) => !c.passed).map((c) => <li key={c.id} className="flex gap-1"><AlertTriangle size={13} className="mt-0.5 shrink-0 text-warn" /><span><strong>{c.label}:</strong> {c.detail}</span></li>)}
                   {res.ats.checks.every((c) => c.passed) && <li>All checks passed.</li>}
                 </ul>
                 <ul className="text-xs list-disc pl-4 text-muted-foreground">{res.ats.tips.slice(0, 3).map((t) => <li key={t}>{t}</li>)}</ul>
@@ -171,9 +171,9 @@ export default function JobPostPage() {
 
           <div className="lg:col-span-3 space-y-4">
             {(res.replies.missingInfo.length > 0 || res.replies.warnings.length > 0) && (
-              <Card className="p-4 text-sm space-y-1 border-yellow-500/50">
+              <Card className="p-4 text-sm space-y-1 note-warn">
                 {res.replies.missingInfo.length > 0 && <p><strong>Fill in before sending:</strong> {res.replies.missingInfo.join(", ")} (replace each [ADD: …]). Save them under Profile → Saved answers to reuse.</p>}
-                {res.replies.warnings.map((w) => <p key={w} className="text-xs text-yellow-700 dark:text-yellow-400">{w}</p>)}
+                {res.replies.warnings.map((w) => <p key={w} className="text-xs text-warn">{w}</p>)}
               </Card>
             )}
 

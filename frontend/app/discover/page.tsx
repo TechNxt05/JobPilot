@@ -13,6 +13,7 @@ import {
   sourceKey,
   type JobSource,
 } from "@internova/core";
+import { MatchRamp, Pnr } from "@/components/chart";
 import { Button, Card, Input } from "@/components/ui";
 import { listApplications, saveApplication } from "@/lib/data";
 import { EMPTY_SETTINGS, type DiscoverResponse, type DiscoverySettings, type RankedJob } from "@/lib/discoverTypes";
@@ -121,9 +122,9 @@ export default function DiscoverPage() {
   const setF = (patch: Partial<DiscoverySettings["filters"]>) => setSettings({ ...settings, filters: { ...settings.filters, ...patch } });
 
   return (
-    <div className="container mx-auto p-6 pt-16 max-w-5xl space-y-6">
+    <div className="container mx-auto p-6 max-w-5xl space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Discover jobs</h1>
+        <h1 className="text-4xl">Discover jobs</h1>
         <p className="text-muted-foreground">
           Open roles straight from companies&apos; own job boards (Greenhouse, Lever, Ashby, SmartRecruiters, Workable), ranked against your resume. No AI quota used.
         </p>
@@ -143,7 +144,7 @@ export default function DiscoverPage() {
           <Toggle on={f.earlyCareerOnly} onChange={(v) => setF({ earlyCareerOnly: v })}>Hide senior roles</Toggle>
           <Toggle on={!!f.searchDescription} onChange={(v) => setF({ searchDescription: v })}>Match keywords in descriptions too</Toggle>
           <label className="flex items-center gap-2">Posted within
-            <select className="h-9 rounded-md border border-input bg-background px-2" value={f.postedWithinDays} onChange={(e) => setF({ postedWithinDays: Number(e.target.value) })}>
+            <select className="h-9 rounded-[3px] border border-input bg-background px-2" value={f.postedWithinDays} onChange={(e) => setF({ postedWithinDays: Number(e.target.value) })}>
               {[7, 14, 30, 60, 90, 0].map((d) => <option key={d} value={d}>{d ? `${d} days` : "any time"}</option>)}
             </select>
           </label>
@@ -151,7 +152,7 @@ export default function DiscoverPage() {
         <div className="flex flex-wrap gap-2">
           <Button onClick={run} disabled={busy || !loaded}>
             {busy ? <Loader2 className="animate-spin mr-2" size={16} /> : <Search className="mr-2" size={16} />}
-            {busy ? "Scanning boards…" : "Find jobs"}
+            {busy ? "Scanning boards…" : "Search company boards"}
           </Button>
           <Button variant="outline" onClick={save} disabled={!loaded}>Save as default</Button>
           <Button variant="ghost" onClick={() => setShowBoards((v) => !v)}><Settings2 size={16} className="mr-2" /> Companies ({countActive(settings)})</Button>
@@ -160,7 +161,7 @@ export default function DiscoverPage() {
       </Card>
 
       {error && <p className="text-destructive text-sm" role="alert">{error}</p>}
-      {notice && <p className="text-sm text-green-700 dark:text-green-400" role="status">{notice}</p>}
+      {notice && <p className="text-sm text-ok" role="status">{notice}</p>}
 
       {result && (
         <>
@@ -173,7 +174,7 @@ export default function DiscoverPage() {
             <Input className="h-9 max-w-xs ml-auto" placeholder="Filter results" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
           {!result.hasResume && (
-            <p className="text-sm rounded-md border border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950 p-3">
+            <p className="text-sm rounded-[3px] note-warn p-3">
               Upload a resume on the <Link className="underline" href="/profile">Profile</Link> page to get match scores and eligibility checks.
             </p>
           )}
@@ -198,7 +199,6 @@ function countActive(s: DiscoverySettings) {
 function JobRow({ job: j, tracked, onTrack, onEmail, onTailor }: { job: RankedJob; tracked: boolean; onTrack: () => void; onEmail: () => void; onTailor: () => void }) {
   const [open, setOpen] = useState(false);
   const age = daysAgo(j.postedAt);
-  const tone = j.score === null ? "border-border text-muted-foreground" : j.score >= 70 ? "border-green-600 text-green-700 dark:text-green-400" : j.score >= 45 ? "border-yellow-600 text-yellow-700 dark:text-yellow-400" : "border-border text-muted-foreground";
   return (
     <Card className="p-4 space-y-2">
       <div className="flex gap-3 justify-between">
@@ -207,21 +207,22 @@ function JobRow({ job: j, tracked, onTrack, onEmail, onTailor }: { job: RankedJo
           <div className="text-sm text-muted-foreground flex flex-wrap gap-x-2">
             <span className="font-medium text-foreground">{j.company}</span>
             {j.location && <span>{j.location}</span>}
-            {j.remote && <span className="text-xs rounded-full border border-border px-2">Remote</span>}
+            {j.remote && <span className="text-xs rounded-[3px] border border-border px-2">Remote</span>}
             {age !== null && <span>{age <= 0 ? "today" : `${age}d ago`}</span>}
-            {age !== null && age <= 3 && <span className="text-xs rounded-full bg-primary text-primary-foreground px-2">New</span>}
+            {age !== null && age <= 3 && <span className="text-xs rounded-[3px] bg-primary text-primary-foreground px-2">New</span>}
             {j.department && <span>· {j.department}</span>}
           </div>
         </div>
-        <div className={`text-sm font-semibold rounded-md border px-2 py-1 h-fit whitespace-nowrap ${tone}`} title={j.resumeName ? `Best match: ${j.resumeName}` : "No description or no resume to compare"}>
-          {j.score === null ? "–" : `${j.score}% match`}
+        <div className="flex shrink-0 flex-col items-end gap-1.5" title={j.resumeName ? `Best match: ${j.resumeName}` : undefined}>
+          <MatchRamp score={j.score} />
+          <Pnr id={j.id} />
         </div>
       </div>
 
       {j.flags.length > 0 && (
         <ul className="space-y-1">
           {j.flags.map((f, i) => (
-            <li key={i} className={`text-xs flex items-start gap-1 ${f.severity === "blocker" ? "text-destructive" : "text-yellow-700 dark:text-yellow-400"}`}>
+            <li key={i} className={`text-xs flex items-start gap-1 ${f.severity === "blocker" ? "text-destructive" : "text-warn"}`}>
               {f.severity === "blocker" ? <Ban size={13} className="mt-0.5 shrink-0" /> : <AlertTriangle size={13} className="mt-0.5 shrink-0" />} {f.message}
             </li>
           ))}
@@ -229,8 +230,8 @@ function JobRow({ job: j, tracked, onTrack, onEmail, onTailor }: { job: RankedJo
       )}
       {(j.matchedSkills.length > 0 || j.missingSkills.length > 0) && (
         <div className="flex flex-wrap gap-1 text-xs">
-          {j.matchedSkills.map((s) => <span key={s} className="rounded-full bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 px-2 py-0.5">{s}</span>)}
-          {j.missingSkills.map((s) => <span key={s} className="rounded-full border border-dashed border-border text-muted-foreground px-2 py-0.5" title="Required, not found in your resume">{s}</span>)}
+          {j.matchedSkills.map((s) => <span key={s} className="rounded-[3px] chip-ok px-2 py-0.5">{s}</span>)}
+          {j.missingSkills.map((s) => <span key={s} className="rounded-[3px] border border-dashed border-border text-muted-foreground px-2 py-0.5" title="Required, not found in your resume">{s}</span>)}
         </div>
       )}
 

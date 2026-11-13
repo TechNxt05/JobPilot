@@ -1,46 +1,80 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-/* Design tokens used by components/ui (shadcn-style names) */
+/*
+ * JobPilot "Reservation Chart" world.
+ * Day chart: buff chart paper ruled in tan, railway-blue header band, maroon for the one primary action.
+ * Night chart: ink-blue ground with buff ink, same blue band. Square corners, rules instead of shadows.
+ * Token names stay shadcn-style so every page and components/ui pick them up.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --card: #ffffff;
-  --card-foreground: #171717;
-  --primary: #2563eb;
+  --background: #f3ebd3;
+  --foreground: #29251e;
+  --card: #f8f2e1;
+  --card-foreground: #29251e;
+  --primary: #1b3f8b;
   --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #0f172a;
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-  --accent: #f1f5f9;
-  --accent-foreground: #0f172a;
-  --destructive: #dc2626;
+  --secondary: #eadfc0;
+  --secondary-foreground: #29251e;
+  --muted: #eadfc0;
+  --muted-foreground: #5e5545;
+  --accent: #e4d6b0;
+  --accent-foreground: #29251e;
+  --destructive: #a3222f;
   --destructive-foreground: #ffffff;
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #2563eb;
+  --border: #cbbd98;
+  --input: #b7a77f;
+  --ring: #1b3f8b;
+
+  /* World roles */
+  --band: #1b3f8b;          /* railway-blue header band */
+  --band-ink: #ffffff;
+  --band-ink-2: #c9d4ee;
+  --strip: #eadfc0;         /* tinted head strip of a chart band */
+  --cta: #8b1e2d;           /* maroon: the one primary action */
+  --cta-foreground: #ffffff;
+  --ok: #2f7a4d;            /* confirmed step */
+  --warn: #8a5d00;          /* caution */
+  --selection: #1b3f8b33;
+  --shell-h: 137px; /* header band + mobile nav row + strip */
+  color-scheme: light;
+}
+
+@media (min-width: 768px) {
+  :root { --shell-h: 97px; }
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --card: #141414;
-    --card-foreground: #ededed;
-    --primary: #3b82f6;
-    --primary-foreground: #ffffff;
-    --secondary: #1e293b;
-    --secondary-foreground: #f1f5f9;
-    --muted: #1e293b;
-    --muted-foreground: #94a3b8;
-    --accent: #1e293b;
-    --accent-foreground: #f1f5f9;
-    --destructive: #ef4444;
-    --destructive-foreground: #ffffff;
-    --border: #27272a;
-    --input: #27272a;
-    --ring: #3b82f6;
+    /* Night chart: ink-blue paper, buff ink */
+    --background: #11214a;
+    --foreground: #f0e7cf;
+    --card: #152858;
+    --card-foreground: #f0e7cf;
+    --primary: #a3bdf5;
+    --primary-foreground: #0b1530;
+    --secondary: #1a3066;
+    --secondary-foreground: #f0e7cf;
+    --muted: #1a3066;
+    --muted-foreground: #c2b99e;
+    --accent: #20397a;
+    --accent-foreground: #f0e7cf;
+    --destructive: #f07580;
+    --destructive-foreground: #0b1220;
+    --border: #2e4884;
+    --input: #4560a0;
+    --ring: #a3bdf5;
+
+    --band: #1d4396;
+    --band-ink: #ffffff;
+    --band-ink-2: #b9c7e6;
+    --strip: #1a3066;
+    --cta: #b83245;
+    --cta-foreground: #ffffff;
+    --ok: #62c08b;
+    --warn: #e2b456;
+    --selection: #8fb0f055;
+    color-scheme: dark;
   }
 }
 
@@ -63,16 +97,68 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-ring-offset-background: var(--background);
+  --color-band: var(--band);
+  --color-band-ink: var(--band-ink);
+  --color-band-ink-2: var(--band-ink-2);
+  --color-strip: var(--strip);
+  --color-cta: var(--cta);
+  --color-cta-foreground: var(--cta-foreground);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-narrow: var(--font-display), "Arial Narrow", ui-sans-serif, sans-serif;
+  --font-mono: var(--font-figures), ui-monospace, monospace;
 }
 
-/* Tailwind v4 defaults borders to currentColor; match the token instead */
 @layer base {
-  *, ::before, ::after {
-    border-color: var(--border);
+  /* Tailwind v4 defaults borders to currentColor; match the token instead */
+  *, ::before, ::after { border-color: var(--border); }
+
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
   }
+  h1, h2, h3 { font-family: var(--font-narrow); letter-spacing: -0.005em; text-wrap: balance; }
+  h1 { font-weight: 700; line-height: 1.05; }
+  h1 + p { margin-top: 0.5rem; }
+  h2, h3 { font-weight: 700; }
+  ::selection { background: var(--selection); }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  a { text-underline-offset: 3px; }
+  input, textarea, select { accent-color: var(--primary); caret-color: var(--primary); }
+  input[type="checkbox"] { width: 1rem; height: 1rem; }
+  * { scrollbar-color: var(--input) transparent; scrollbar-width: thin; }
+  code { font-family: var(--font-mono); font-size: 0.85em; }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
+@layer components {
+  /* A chart band: ruled box with a tinted head strip */
+  .band { border: 1px solid var(--border); background: var(--card); }
+  .band-head {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px;
+    padding: 9px 14px; background: var(--strip); border-bottom: 1px solid var(--border);
+    font-family: var(--font-narrow); font-weight: 700; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .band-row { border-bottom: 1px dotted var(--border); }
+  .band-row:last-child { border-bottom: 0; }
+  /* Small caps label used for column heads and field names */
+  .label {
+    font-family: var(--font-narrow); font-weight: 600; font-size: 11.5px; line-height: 1.2;
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted-foreground);
+  }
+  .fig { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 12px; letter-spacing: 0; }
+  .note-warn { border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 9%, var(--card)); }
+  .note-ok { border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent); background: color-mix(in srgb, var(--ok) 9%, var(--card)); }
+  .chip-ok { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+  .chip { border: 1px solid var(--border); color: var(--muted-foreground); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

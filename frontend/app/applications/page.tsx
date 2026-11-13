@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, Loader2, Trash2 } from "lucide-react";
 import { APPLICATION_STATUSES, newApplication, type Application, type ApplicationStatus } from "@internova/core";
+import { Ladder, MatchRamp, Pnr } from "@/components/chart";
 import { Button, Card, Input } from "@/components/ui";
 import { deleteApplication, listApplications, saveApplication } from "@/lib/data";
 
@@ -36,9 +37,9 @@ export default function ApplicationsPage() {
   const due = apps.filter((a) => a.followUpOn && a.followUpOn <= today && !["offer", "rejected", "withdrawn"].includes(a.status));
 
   return (
-    <div className="container mx-auto p-6 pt-16 max-w-5xl space-y-6">
+    <div className="container mx-auto p-6 max-w-5xl space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Application tracker</h1>
+        <h1 className="text-4xl">Application tracker</h1>
         <p className="text-muted-foreground">Synced with the JobPilot browser extension: jobs you save there appear here.</p>
       </div>
       {error && <p className="text-destructive text-sm" role="alert">{error}</p>}
@@ -51,7 +52,7 @@ export default function ApplicationsPage() {
       </div>
 
       {due.length > 0 && (
-        <div className="rounded-md border border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950 p-3 text-sm">
+        <div className="rounded-[3px] note-warn p-3 text-sm">
           <strong>{due.length} follow-up{due.length > 1 ? "s" : ""} due:</strong> {due.map((a) => `${a.title} · ${a.company}`).join("; ")}
         </div>
       )}
@@ -77,11 +78,12 @@ export default function ApplicationsPage() {
                 </a>
                 <div className="text-sm text-muted-foreground">{[a.company, a.location].filter(Boolean).join(" · ")}</div>
               </div>
-              {a.score !== null && <span className="text-xs rounded-full border border-border px-2 py-0.5 h-fit">{a.score}/100</span>}
+              <div className="flex shrink-0 flex-col items-end gap-1.5"><Pnr id={a.id} />{a.score !== null && <MatchRamp score={a.score} />}</div>
             </div>
+            <Ladder status={a.status} />
             <div className="grid grid-cols-2 gap-2">
               <label className="text-xs font-medium flex flex-col gap-1">Status
-                <select className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={a.status}
+                <select className="h-9 rounded-[3px] border border-input bg-background px-2 text-sm" value={a.status}
                   onChange={(e) => update(a, { status: e.target.value as ApplicationStatus })}>
                   {APPLICATION_STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                 </select>
@@ -108,7 +110,7 @@ export default function ApplicationsPage() {
 
 function FilterChip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} className={`text-xs rounded-full px-3 py-1 border ${on ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-muted"}`}>
+    <button onClick={onClick} className={`text-xs rounded-[3px] px-3 py-1 border ${on ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-muted"}`}>
       {children}
     </button>
   );
@@ -120,6 +122,6 @@ function Notes({ app, onSave }: { app: Application; onSave: (n: string) => void 
   return (
     <textarea rows={2} value={text} placeholder="Notes: referral, interview dates, contacts…" onChange={(e) => setText(e.target.value)}
       onBlur={() => text !== app.notes && onSave(text)}
-      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+      className="w-full rounded-[3px] border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
   );
 }

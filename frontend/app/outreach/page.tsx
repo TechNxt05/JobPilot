@@ -82,13 +82,13 @@ export default function OutreachPage() {
     } catch (e) { setError((e as Error).message); }
   }
 
-  if (!contacts) return <div className="p-8 pt-16 flex items-center gap-2"><Loader2 className="animate-spin" /> Loading…</div>;
+  if (!contacts) return <div className="p-8 flex items-center gap-2"><Loader2 className="animate-spin" /> Loading…</div>;
 
   return (
-    <div className="container mx-auto p-6 pt-16 max-w-6xl space-y-5">
+    <div className="container mx-auto p-6 max-w-6xl space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold">Recruiter outreach</h1>
+          <h1 className="text-4xl">Recruiter outreach</h1>
           <p className="text-muted-foreground">Your private list of recruiter and HR contacts. JobPilot drafts the email; you review it and send it from your own mail.</p>
         </div>
         <div className="flex gap-2">
@@ -101,13 +101,13 @@ export default function OutreachPage() {
       {showImport && <ImportPanel onDone={(n) => { setShowImport(false); reload(); setError(null); alert(`${n} contacts imported.`); }} />}
 
       {due.length > 0 && (
-        <div className="rounded-md border border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950 p-3 text-sm">
+        <div className="rounded-[3px] note-warn p-3 text-sm">
           <strong>{due.length} follow-up{due.length > 1 ? "s" : ""} due:</strong> {due.slice(0, 8).map((c) => `${c.name || c.email} (${c.company})`).join("; ")}{due.length > 8 ? "…" : ""}
         </div>
       )}
 
       {job && (
-        <div className="rounded-md border border-border p-3 text-sm flex items-start gap-2">
+        <div className="rounded-[3px] border border-border p-3 text-sm flex items-start gap-2">
           <span className="min-w-0">Emails will be about <strong>{job.title}</strong> at {job.company}. Showing contacts at that company.</span>
           <button className="ml-auto text-muted-foreground hover:text-foreground" aria-label="Clear job" onClick={() => {
             setJob(null); setCompany("");
@@ -119,11 +119,11 @@ export default function OutreachPage() {
       <div className="flex flex-wrap gap-2">
         <Input className="max-w-xs" placeholder="Search name, email, role tags…" value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
         <Input className="max-w-56" placeholder="Company" value={company} onChange={(e) => { setCompany(e.target.value); setLimit(PAGE); }} />
-        <select className="h-10 rounded-md border border-input bg-background px-2 text-sm" value={country} onChange={(e) => setCountry(e.target.value)} aria-label="Country">
+        <select className="h-10 rounded-[3px] border border-input bg-background px-2 text-sm" value={country} onChange={(e) => setCountry(e.target.value)} aria-label="Country">
           <option value="">All countries</option>
           {countries.map((c) => <option key={c}>{c}</option>)}
         </select>
-        <select className="h-10 rounded-md border border-input bg-background px-2 text-sm" value={outreach} onChange={(e) => setOutreach(e.target.value)} aria-label="Outreach status">
+        <select className="h-10 rounded-[3px] border border-input bg-background px-2 text-sm" value={outreach} onChange={(e) => setOutreach(e.target.value)} aria-label="Outreach status">
           <option value="">Any outreach</option>
           {OUTREACH_STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
@@ -153,10 +153,10 @@ export default function OutreachPage() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <select className="h-9 rounded-md border border-input bg-background px-2 text-xs" value={c.status} aria-label="Email status" onChange={(e) => patch(c, { status: e.target.value as Contact["status"] })}>
+              <select className="h-9 rounded-[3px] border border-input bg-background px-2 text-xs" value={c.status} aria-label="Email status" onChange={(e) => patch(c, { status: e.target.value as Contact["status"] })}>
                 {CONTACT_STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
               </select>
-              <select className="h-9 rounded-md border border-input bg-background px-2 text-xs" value={c.outreach} aria-label="Outreach" onChange={(e) => patch(c, { outreach: e.target.value as Contact["outreach"] })}>
+              <select className="h-9 rounded-[3px] border border-input bg-background px-2 text-xs" value={c.outreach} aria-label="Outreach" onChange={(e) => patch(c, { outreach: e.target.value as Contact["outreach"] })}>
                 {OUTREACH_STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
               </select>
               <Input type="date" className="h-9 w-36 text-xs" title="Follow up on" value={c.followUpOn} onChange={(e) => patch(c, { followUpOn: e.target.value })} />
@@ -216,7 +216,7 @@ function ImportPanel({ onDone }: { onDone: (n: number) => void }) {
       </div>
       <input type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" onChange={file} className="text-sm" />
       <textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={"Company,Name,Email,Designation,Country\nRazorpay,Asha Rao,asha@razorpay.com,Talent Partner,India"}
-        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+        className="w-full rounded-[3px] border border-input bg-background px-3 py-2 text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <Input placeholder="Country for rows without one (e.g. India, Saudi Arabia)" value={country} onChange={(e) => setCountry(e.target.value)} />
         <Input placeholder="Source / list name (e.g. India HR list)" value={source} onChange={(e) => setSource(e.target.value)} />
@@ -290,7 +290,7 @@ function DraftDialog({ contact, job, onClose, onSent }: { contact: Contact; job:
             {!(useJob && job) && (
               <>
                 <textarea rows={4} value={jd} onChange={(e) => setJd(e.target.value)} placeholder="Optional: paste a job description to write about a specific opening"
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                  className="w-full rounded-[3px] border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
                 <Input value={target} onChange={(e) => setTarget(e.target.value)} placeholder="What you're looking for (e.g. AI / backend engineering roles, 2026 graduate)" />
               </>
             )}
@@ -303,9 +303,9 @@ function DraftDialog({ contact, job, onClose, onSent }: { contact: Contact; job:
           <div className="space-y-2">
             <Input value={subject} onChange={(e) => setSubject(e.target.value)} aria-label="Subject" />
             <textarea rows={14} value={body} onChange={(e) => setBody(e.target.value)} aria-label="Email body"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+              className="w-full rounded-[3px] border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
             {warnings.length > 0 && (
-              <ul className="text-xs text-yellow-700 dark:text-yellow-400 space-y-0.5">
+              <ul className="text-xs text-warn space-y-0.5">
                 {warnings.map((w, i) => <li key={i} className="flex gap-1"><AlertTriangle size={13} className="mt-0.5 shrink-0" /> {w}</li>)}
               </ul>
             )}

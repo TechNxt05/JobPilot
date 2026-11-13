@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-14T02:00:00+05:30",
+  "title": "Design System: JobPilot",
+  "extensions": {
+    "colorMeta": {
+      "railway-blue": { "role": "primary", "displayName": "Railway Blue", "canonical": "#1b3f8b", "tonalRamp": ["#0c1c40", "#13295d", "#1b3f8b", "#3559a6", "#5b7bbf", "#8aa2d6", "#b9c7e6", "#e3e9f6"] },
+      "signal-maroon": { "role": "secondary", "displayName": "Signal Maroon", "canonical": "#8b1e2d", "tonalRamp": ["#3f0d14", "#5f1420", "#8b1e2d", "#a8374a", "#c25e6f", "#d78d99", "#e8b9c0", "#f6e3e6"] },
+      "confirmed-green": { "role": "tertiary", "displayName": "Confirmed Green", "canonical": "#2f7a4d", "tonalRamp": ["#123321", "#1c4d31", "#2f7a4d", "#46955f", "#62c08b", "#8fd2aa", "#bfe4cc", "#e6f4eb"] },
+      "caution-amber": { "role": "tertiary", "displayName": "Caution Amber", "canonical": "#8a5d00", "tonalRamp": ["#3a2800", "#5c4000", "#8a5d00", "#a87a14", "#e2b456", "#ecca85", "#f4dfb4", "#fbf2e0"] },
+      "chart-buff": { "role": "neutral", "displayName": "Chart Buff", "canonical": "#f3ebd3" },
+      "chart-strip": { "role": "neutral", "displayName": "Chart Strip", "canonical": "#eadfc0" },
+      "chart-rule": { "role": "neutral", "displayName": "Chart Rule", "canonical": "#cbbd98" },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#29251e" },
+      "night-ground": { "role": "neutral", "displayName": "Night Chart Ground", "canonical": "#11214a" },
+      "night-band": { "role": "primary", "displayName": "Night Railway Band", "canonical": "#1d4396" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Page title, e.g. Chart for <date>." },
+      "band-title": { "displayName": "Band title", "purpose": "Uppercase caption in a band's head strip." },
+      "label": { "displayName": "Label", "purpose": "Column heads and field names." },
+      "figures": { "displayName": "Figures", "purpose": "PNRs, scores, counts and date offsets; tabular." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "ease-out-expo", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Execution flow steps arriving (250ms)." },
+      { "name": "state-change", "value": "150ms ease", "purpose": "Button and link colour changes." }
+    ],
+    "breakpoints": [
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "CTA Button",
+      "kind": "button",
+      "refersTo": "button-cta",
+      "description": "The one maroon action on a screen.",
+      "html": "<button class=\"ds-btn-cta\">Find jobs everywhere</button>",
+      "css": ".ds-btn-cta{background:var(--cta,#8b1e2d);color:#fff;height:48px;padding:0 24px;border:0;border-radius:3px;font:600 15px/1 'Archivo Narrow',sans-serif;letter-spacing:.08em;text-transform:uppercase;transition:background .15s}.ds-btn-cta:hover{background:#7a1a28}.ds-btn-cta:focus-visible{outline:2px solid #1b3f8b;outline-offset:2px}"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Railway-blue action for forms and secondary flows.",
+      "html": "<button class=\"ds-btn-primary\">Generate</button>",
+      "css": ".ds-btn-primary{background:#1b3f8b;color:#fff;height:40px;padding:0 16px;border:0;border-radius:3px;font:600 14px/1 'Archivo Narrow',sans-serif;letter-spacing:.04em;transition:background .15s}.ds-btn-primary:hover{background:#18387c}.ds-btn-primary:focus-visible{outline:2px solid #1b3f8b;outline-offset:2px}"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Row actions (Save, Tailor, Email).",
+      "html": "<button class=\"ds-btn-outline\">Save</button>",
+      "css": ".ds-btn-outline{background:#f8f2e1;color:#29251e;height:32px;padding:0 12px;border:1px solid #b7a77f;border-radius:3px;font:600 13px/1 'Archivo Narrow',sans-serif;letter-spacing:.04em}.ds-btn-outline:hover{background:#e4d6b0}.ds-btn-outline:focus-visible{outline:2px solid #1b3f8b;outline-offset:2px}"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Text field on card paper.",
+      "html": "<input class=\"ds-input\" placeholder=\"you@example.com\">",
+      "css": ".ds-input{background:#f8f2e1;color:#29251e;height:40px;padding:8px 12px;border:1px solid #b7a77f;border-radius:3px;font:400 14px 'Archivo',sans-serif}.ds-input::placeholder{color:#5e5545}.ds-input:focus-visible{outline:2px solid #1b3f8b;outline-offset:1px}"
+    },
+    {
+      "name": "Header Band",
+      "kind": "nav",
+      "refersTo": "header-band",
+      "description": "Railway-blue band with uppercase nav; active item underlined.",
+      "html": "<nav class=\"ds-band\"><b>JobPilot</b><a class=\"on\">Today</a><a>Discover</a><a>Jobs</a></nav>",
+      "css": ".ds-band{display:flex;gap:20px;align-items:center;height:56px;padding:0 24px;background:#1b3f8b;color:#fff}.ds-band b{font:700 22px 'Archivo Narrow',sans-serif}.ds-band a{color:#c9d4ee;font:600 14px 'Archivo Narrow',sans-serif;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid transparent;padding:18px 0 16px}.ds-band a.on,.ds-band a:hover{color:#fff}.ds-band a.on{border-color:#fff}"
+    },
+    {
+      "name": "Chart Band",
+      "kind": "card",
+      "refersTo": "band-head",
+      "description": "Ruled box with tinted head strip and dotted row rules.",
+      "html": "<section class=\"ds-chart\"><header>New matches <span>5 shown</span></header><div>Software Engineer, Backend</div><div>Applied AI Engineer</div></section>",
+      "css": ".ds-chart{border:1px solid #cbbd98;background:#f8f2e1;border-radius:3px;font:400 15px 'Archivo',sans-serif;color:#29251e}.ds-chart header{display:flex;justify-content:space-between;padding:9px 14px;background:#eadfc0;border-bottom:1px solid #cbbd98;font:700 13px 'Archivo Narrow',sans-serif;letter-spacing:.1em;text-transform:uppercase}.ds-chart header span{font:400 13px 'Archivo',sans-serif;letter-spacing:0;text-transform:none;color:#5e5545}.ds-chart div{padding:12px 16px;border-bottom:1px dotted #cbbd98}.ds-chart div:last-child{border:0}"
+    },
+    {
+      "name": "Status Ladder",
+      "kind": "custom",
+      "refersTo": "status-ladder",
+      "description": "Done steps green, current blue, later outlined.",
+      "html": "<span class=\"ds-ladder\"><i class=\"d\">Saved</i><i class=\"c\">Applied</i><i>Interview</i><i>Offer</i></span>",
+      "css": ".ds-ladder{display:inline-flex;gap:3px}.ds-ladder i{font:400 11px/1 'Martian Mono',monospace;font-style:normal;text-transform:uppercase;padding:3px 6px;border:1px solid #b7a77f;color:#5e5545}.ds-ladder i.d{background:#2f7a4d;border-color:#2f7a4d;color:#fff}.ds-ladder i.c{background:#1b3f8b;border-color:#1b3f8b;color:#fff}"
+    },
+    {
+      "name": "Match Ramp",
+      "kind": "custom",
+      "refersTo": "match-ramp",
+      "description": "Five-block match score with the number.",
+      "html": "<span class=\"ds-ramp\"><i class=\"f\"></i><i class=\"f\"></i><i class=\"f\"></i><i class=\"f\"></i><i></i> <b>79</b></span>",
+      "css": ".ds-ramp{display:inline-flex;gap:2px;align-items:center}.ds-ramp i{width:9px;height:9px;border:1px solid #b7a77f}.ds-ramp i.f{background:#2f7a4d;border-color:#2f7a4d}.ds-ramp b{margin-left:6px;font:400 13px 'Martian Mono',monospace}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Reservation Chart",
+    "overview": "JobPilot reads like the chart pasted on a train coach on departure day: a railway-blue header band, buff paper ruled into bands, and every application on one row with a reference number and a status. It is an Operate surface: the world contributes only type, palette, density and one signature move, the PNR plus the status ladder.",
+    "keyCharacteristics": [
+      "Railway-blue header band over a buff Prepare strip; bands with tinted head strips.",
+      "PNR references and figures in tabular Martian Mono; headings and labels in Archivo Narrow caps.",
+      "One match ramp (five blocks) and one status ladder, used identically on every page.",
+      "Square-ish corners (3px), 1px rules, no shadows."
+    ],
+    "rules": [
+      { "name": "The One Maroon Rule", "body": "A screen has at most one maroon control. The header's Find jobs link hides on the home page, where the page's own Find button is the primary.", "section": "colors" },
+      { "name": "The Meaning-Only Colour Rule", "body": "Green, amber and red appear only when they carry state (done, caution, refused). Decoration is done with rules and type, never colour.", "section": "colors" },
+      { "name": "The Figures-Are-Mono Rule", "body": "Anything a user compares down a column (PNR, score, count, date offset) is set in Martian Mono with tabular numerals. Prose is never mono.", "section": "typography" },
+      { "name": "The Ruled-Not-Raised Rule", "body": "Separate things with a 1px rule or a tinted strip, never a shadow or a floating card.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do give every job and application its PNR and ladder, on every page that lists them.",
+      "Do keep one maroon action per screen (Signal Maroon, 48px on the home page).",
+      "Do head every group of rows with a band strip and, on desktop, a column-head row.",
+      "Do set PNRs, scores, counts and dates in Martian Mono with tabular numerals."
+    ],
+    "donts": [
+      "Don't add shadows, floating cards or large radii; this world is ruled paper (3px corners).",
+      "Don't use colour for decoration; green, amber and red only for done, caution and refused.",
+      "Don't reuse railway jargon for meaning (no \"RAC\" or \"CNF\" as statuses); labels stay plain (Saved, Applied, Interview, Offer).",
+      "Don't use a coloured border-left above 1px to mark state; use a ladder step or a tag."
+    ]
+  }
+}

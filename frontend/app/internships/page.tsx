@@ -43,7 +43,7 @@ export default function InternshipsPage() {
         <div className="container mx-auto p-6 max-w-5xl">
             <div className="flex justify-between items-center mb-8">
                 <div>
-                    <h1 className="text-3xl font-bold">Internship Board</h1>
+                    <h1 className="text-4xl">Internship Board</h1>
                     <p className="text-muted-foreground">Find and analyze the best opportunities for you.</p>
                 </div>
                 <div className="flex gap-2">
@@ -57,7 +57,7 @@ export default function InternshipsPage() {
             </div>
 
             {/* Search Bar */}
-            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 mb-8">
+            <div className="bg-card p-4 rounded-[3px] border border-border flex flex-col md:flex-row gap-4 mb-8">
                 <div className="flex-1">
                     <label className="text-sm font-medium mb-1 block">Role</label>
                     <Input
@@ -92,7 +92,7 @@ export default function InternshipsPage() {
                     </div>
                 ) : (
                     !loading && (
-                        <div className="text-center text-gray-500 py-12">
+                        <div className="text-center text-muted-foreground py-12">
                             <p>No jobs found yet. Start a search!</p>
                         </div>
                     )

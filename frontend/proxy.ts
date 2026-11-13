@@ -20,7 +20,9 @@ export async function proxy(req: NextRequest) {
   // getUser() validates the token with Supabase Auth (not just the cookie) and refreshes it if needed
   const { data } = await supabase.auth.getUser();
   const path = req.nextUrl.pathname;
-  if (!data.user && !PUBLIC.some((re) => re.test(path))) {
+  // Local UI preview (next dev + NEXT_PUBLIC_UI_PREVIEW=1) renders signed-in pages with synthetic data
+  const preview = process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_UI_PREVIEW === "1";
+  if (!data.user && !preview && !PUBLIC.some((re) => re.test(path))) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", path);

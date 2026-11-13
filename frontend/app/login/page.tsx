@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button, Card, Input } from "@/components/ui";
+import { Button, Input } from "@/components/ui";
 import { supabase } from "@/lib/supabase/client";
 
 function LoginForm() {
@@ -39,21 +39,20 @@ function LoginForm() {
   }
 
   return (
-    <Card className="w-full max-w-sm p-6 space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Sign in to JobPilot</h1>
-        <p className="text-sm text-muted-foreground">Same account as the JobPilot browser extension. Your profile, resumes and tracked jobs are shared.</p>
-      </div>
+    <section className="band w-full max-w-md rounded-[3px]">
+      <div className="band-head">Sign in</div>
+      <div className="space-y-4 p-6">
+      <p className="text-sm text-muted-foreground">Same account as the JobPilot browser extension: your profile, resumes and tracked jobs are shared.</p>
       {linkError && !msg && <p className="text-sm text-destructive" role="alert">{linkError}</p>}
       {!sent ? (
         <form onSubmit={sendCode} className="space-y-3">
-          <label className="block text-sm font-medium" htmlFor="email">Email</label>
+          <label className="label block" htmlFor="email">Email</label>
           <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
-          <Button className="w-full" disabled={busy || !email}>{busy ? "Sending…" : "Email me a code"}</Button>
+          <Button variant="cta" className="w-full uppercase tracking-[0.08em]" disabled={busy || !email}>{busy ? "Sending…" : "Email me a code"}</Button>
         </form>
       ) : (
         <form onSubmit={verify} className="space-y-3">
-          <label className="block text-sm font-medium" htmlFor="code">6-digit code</label>
+          <label className="label block" htmlFor="code">6-digit code</label>
           <Input id="code" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" />
           <Button className="w-full" disabled={busy || code.trim().length < 6}>{busy ? "Verifying…" : "Verify and sign in"}</Button>
           <button type="button" className="text-sm text-muted-foreground underline" onClick={() => { setSent(false); setCode(""); setMsg(null); }}>
@@ -62,16 +61,31 @@ function LoginForm() {
         </form>
       )}
       {msg && <p className={`text-sm ${msg.error ? "text-destructive" : "text-muted-foreground"}`} role={msg.error ? "alert" : undefined}>{msg.text}</p>}
-    </Card>
+      </div>
+    </section>
   );
 }
 
 export default function LoginPage() {
   return (
-    <main className="min-h-screen flex items-center justify-center p-4">
-      <Suspense>
-        <LoginForm />
-      </Suspense>
+    <main className="grid min-h-dvh grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="flex flex-col justify-between gap-10 bg-band p-8 text-band-ink md:p-12">
+        <span className="font-narrow text-[26px] font-bold tracking-[0.02em]">JobPilot</span>
+        <div className="max-w-lg space-y-5">
+          <h1 className="text-[44px] md:text-[56px] leading-[1.02]">Every application on one chart.</h1>
+          <ul className="space-y-2.5 text-band-ink-2">
+            <li>Roles straight from company job boards, ranked against your resume.</li>
+            <li>Resumes, cover letters and recruiter emails written only from facts you can back.</li>
+            <li>Every application tracked from saved to offer, with follow-ups on time.</li>
+          </ul>
+        </div>
+        <span className="fig text-band-ink-2">Nothing is ever sent or submitted without you.</span>
+      </div>
+      <div className="flex items-center justify-center p-6">
+        <Suspense>
+          <LoginForm />
+        </Suspense>
+      </div>
     </main>
   );
 }

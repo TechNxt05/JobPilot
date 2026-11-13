@@ -110,16 +110,16 @@ export default function ProfilePage() {
   if (loading) return <div className="p-8 flex items-center gap-2"><Loader2 className="animate-spin" /> Loading your profile…</div>;
 
   return (
-    <div className="container mx-auto p-6 pt-16 max-w-4xl space-y-6 pb-28">
+    <div className="container mx-auto p-6 max-w-4xl space-y-6 pb-28">
       <div>
-        <h1 className="text-3xl font-bold">Your profile</h1>
+        <h1 className="text-4xl">Your profile</h1>
         <p className="text-muted-foreground">Shared with the JobPilot browser extension. Upload a resume and the sections below fill in automatically.</p>
       </div>
 
       <Card className="p-6 space-y-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <h2 className="text-xl font-semibold">Resumes</h2>
-          <label className="inline-flex items-center gap-2 cursor-pointer rounded-md bg-primary text-primary-foreground px-4 h-10 text-sm font-medium hover:bg-primary/90">
+          <label className="inline-flex items-center gap-2 cursor-pointer rounded-[3px] bg-primary text-primary-foreground px-4 h-10 text-sm font-medium hover:bg-primary/90">
             {uploading ? <Loader2 className="animate-spin" size={16} /> : <Upload size={16} />} Upload PDF
             <input type="file" accept="application/pdf,.pdf" className="hidden" onChange={onUpload} disabled={uploading} />
           </label>
@@ -146,7 +146,7 @@ export default function ProfilePage() {
       </Card>
 
       {status && (
-        <div role="status" className={`rounded-md border p-3 text-sm ${status.kind === "error" ? "border-destructive text-destructive" : status.kind === "ok" ? "border-green-600/40 bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200" : "border-border bg-muted"}`}>
+        <div role="status" className={`rounded-[3px] border p-3 text-sm ${status.kind === "error" ? "border-destructive text-destructive" : status.kind === "ok" ? "note-ok text-ok" : "border-border bg-muted"}`}>
           {status.text}
         </div>
       )}
@@ -247,7 +247,7 @@ export default function ProfilePage() {
 
 function Section({ title, open, children }: { title: string; open?: boolean; children: React.ReactNode }) {
   return (
-    <details open={open} className="group rounded-lg border border-border bg-card shadow-sm">
+    <details open={open} className="group rounded-[3px] border border-border bg-card">
       <summary className="cursor-pointer list-none p-5 flex justify-between items-center">
         <h2 className="text-lg font-semibold">{title}</h2>
         <span className="text-muted-foreground transition-transform group-open:rotate-90" aria-hidden>▸</span>
@@ -262,7 +262,7 @@ function Field({ label, wide, badge, children }: { label: string; wide?: boolean
     <label className={`flex flex-col gap-1 ${wide ? "md:col-span-2" : ""}`}>
       <span className="text-sm font-medium flex items-center gap-2">
         {label}
-        {badge && <span className="text-xs rounded-full px-2 py-0.5 bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100">{badge}</span>}
+        {badge && <span className="text-xs rounded-[3px] px-2 py-0.5 note-warn text-warn">{badge}</span>}
       </span>
       {children}
     </label>
@@ -272,7 +272,7 @@ function Field({ label, wide, badge, children }: { label: string; wide?: boolean
 function TextArea({ value, onChange, rows = 3, placeholder }: { value: string; onChange: (v: string) => void; rows?: number; placeholder?: string }) {
   return (
     <textarea rows={rows} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+      className="w-full rounded-[3px] border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
   );
 }
 
@@ -283,7 +283,7 @@ function ListText({ value, separator, rows, placeholder, onCommit }: { value: st
   return (
     <textarea rows={rows} value={text} placeholder={placeholder} onChange={(e) => setText(e.target.value)}
       onBlur={() => onCommit(text.split(separator).map((s) => s.trim()).filter(Boolean))}
-      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+      className="w-full rounded-[3px] border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
   );
 }
 
@@ -296,7 +296,7 @@ function ListEditor<T extends object>({ items, empty, onChange, fields, addLabel
   return (
     <div className="space-y-3">
       {items.map((item, i) => (
-        <details key={i} open={!title(item)} className="rounded-md border border-border bg-muted/40 p-3">
+        <details key={i} open={!title(item)} className="rounded-[3px] border border-border bg-muted/40 p-3">
           <summary className="cursor-pointer flex items-center justify-between gap-2">
             <span className="font-medium">{title(item) || "New entry"}</span>
             <Button variant="ghost" size="sm" onClick={(e) => { e.preventDefault(); onChange(items.filter((_, j) => j !== i)); }}>Remove</Button>

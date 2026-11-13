@@ -93,9 +93,9 @@ export default function ResumeUpgradePage() {
   const filename = `Resume_${(company || "Tailored").replace(/\W+/g, "_")}`;
 
   return (
-    <div className="container mx-auto p-6 pt-16 max-w-6xl space-y-6">
+    <div className="container mx-auto p-6 max-w-6xl space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Resume upgrade</h1>
+        <h1 className="text-4xl">Resume upgrade</h1>
         <p className="text-muted-foreground">
           Tailors your resume to a job: ATS keywords you genuinely have, quantified bullets using only your real numbers, varied verbs, one page.
           Paste your Overleaf code to keep your own design, or leave it empty to use JobPilot&apos;s ATS-friendly template.
@@ -110,19 +110,19 @@ export default function ResumeUpgradePage() {
             <Input value={jobUrl} onChange={(e) => setJobUrl(e.target.value)} placeholder="https://… (used to detect the company’s ATS)" />
           </label>
           <label className="flex flex-col gap-1 text-sm font-medium">Applicant tracking system
-            <select className="h-10 rounded-md border border-input bg-background px-2 text-sm font-normal" value={ats} onChange={(e) => setAts(e.target.value as AtsVendor | "auto")}>
+            <select className="h-10 rounded-[3px] border border-input bg-background px-2 text-sm font-normal" value={ats} onChange={(e) => setAts(e.target.value as AtsVendor | "auto")}>
               <option value="auto">Auto-detect{jobUrl ? `: ${ATS_PROFILES[detected].label}` : " (from the job link)"}</option>
               {Object.values(ATS_PROFILES).filter((p) => p.id !== "unknown").map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm font-medium">Job description
             <textarea required rows={12} value={jd} onChange={(e) => setJd(e.target.value)} placeholder="Paste the full job description"
-              className="rounded-md border border-input bg-background px-3 py-2 text-sm font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+              className="rounded-[3px] border border-input bg-background px-3 py-2 text-sm font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
           </label>
           <label className="flex flex-col gap-1 text-sm font-medium">Overleaf / LaTeX code (optional)
             <textarea rows={12} value={source} onChange={(e) => setSource(e.target.value)} spellCheck={false}
               placeholder={"Paste your main.tex from Overleaf (Menu → Download → Source, or copy the editor).\nLeave empty to generate from your JobPilot profile."}
-              className="rounded-md border border-input bg-background px-3 py-2 text-xs font-mono font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+              className="rounded-[3px] border border-input bg-background px-3 py-2 text-xs font-mono font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
           </label>
           <div className="md:col-span-2 flex items-center gap-4 flex-wrap">
             <Button type="submit" disabled={busy || jd.trim().length < 80}>
@@ -146,7 +146,7 @@ export default function ResumeUpgradePage() {
 
             {result.ats && <AtsCard before={result.ats.before} after={result.ats.after} />}
             {(result.warnings?.length ?? 0) > 0 && (
-              <Card className="p-4 border-yellow-500/50">
+              <Card className="p-4 note-warn">
                 <h3 className="font-semibold text-sm mb-2">Check these (not in your resume or profile)</h3>
                 <ul className="text-sm list-disc pl-4 space-y-1">{result.warnings!.map((w) => <li key={w}>{w}</li>)}</ul>
               </Card>
@@ -161,7 +161,7 @@ export default function ResumeUpgradePage() {
               <Card className="p-4">
                 <h3 className="font-semibold text-sm mb-1">Skill gaps (not added)</h3>
                 <p className="text-xs text-muted-foreground mb-2">The job asks for these and your profile doesn&apos;t show them. Learn or build with them before claiming them.</p>
-                <div className="flex flex-wrap gap-1">{r.skillGaps.map((g) => <span key={g} className="text-xs rounded-full border border-border px-2 py-0.5">{g}</span>)}</div>
+                <div className="flex flex-wrap gap-1">{r.skillGaps.map((g) => <span key={g} className="text-xs rounded-[3px] border border-border px-2 py-0.5">{g}</span>)}</div>
               </Card>
             )}
             {r.repeatedVerbs.length > 0 && (
@@ -191,7 +191,7 @@ export default function ResumeUpgradePage() {
                 </Button>
               </div>
               <textarea rows={16} value={latex} onChange={(e) => setLatex(e.target.value)} spellCheck={false} aria-label="LaTeX source"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                className="w-full rounded-[3px] border border-input bg-background px-3 py-2 text-xs font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
             </Card>
           </div>
         </div>
@@ -206,7 +206,7 @@ function Metric({ label, before, after }: { label: string; before: number | null
     <div className="text-sm">
       <div className="text-muted-foreground">{label}</div>
       <div className="text-xl font-semibold">
-        {before ?? "–"} <span className="text-muted-foreground">→</span> <span className={up ? "text-green-600" : ""}>{after ?? "–"}</span>
+        {before ?? "–"} <span className="text-muted-foreground">→</span> <span className={up ? "text-ok" : ""}>{after ?? "–"}</span>
       </div>
     </div>
   );
@@ -218,12 +218,12 @@ function AtsCard({ before, after }: { before: AtsVendorReport | null; after: Ats
     <Card className="p-4 space-y-2">
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="font-semibold text-sm">{after.label} check <span className="font-normal text-muted-foreground">({after.parsing} parser)</span></h3>
-        <span className="text-sm font-semibold">{before ? <>{before.score} <span className="text-muted-foreground">→</span> </> : null}<span className={before && after.score > before.score ? "text-green-600" : ""}>{after.score}</span></span>
+        <span className="text-sm font-semibold">{before ? <>{before.score} <span className="text-muted-foreground">→</span> </> : null}<span className={before && after.score > before.score ? "text-ok" : ""}>{after.score}</span></span>
       </div>
       <ul className="text-xs space-y-1">
         {after.checks.map((c) => (
           <li key={c.id} className="flex gap-2">
-            <span className={c.passed ? "text-green-600" : "text-yellow-700 dark:text-yellow-400"}>{c.passed ? "✓" : "!"}</span>
+            <span className={c.passed ? "text-ok" : "text-warn"}>{c.passed ? "✓" : "!"}</span>
             <span><strong>{c.label}</strong>{prev.get(c.id) && !prev.get(c.id)!.passed && c.passed ? " (fixed)" : ""}: {c.detail}</span>
           </li>
         ))}

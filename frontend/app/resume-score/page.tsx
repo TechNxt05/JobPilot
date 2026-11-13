@@ -46,16 +46,16 @@ export default function ResumeScorePage() {
     };
 
     const getScoreColor = (score: number) => {
-        if (score >= 80) return "text-green-600 border-green-200 stroke-green-500";
-        if (score >= 50) return "text-yellow-600 border-yellow-200 stroke-yellow-500";
-        return "text-red-600 border-red-200 stroke-red-500";
+        if (score >= 80) return "text-ok";
+        if (score >= 50) return "text-warn";
+        return "text-destructive";
     };
 
     return (
         <div className="container mx-auto p-6 max-w-4xl">
             <div className="flex justify-between items-center mb-8">
                 <div>
-                    <h1 className="text-3xl font-bold">Resume Health Check</h1>
+                    <h1 className="text-4xl">Resume Health Check</h1>
                     <p className="text-muted-foreground">Detailed ATS analysis and improvement tips.</p>
                 </div>
                 <div className="flex gap-2">
@@ -71,25 +71,25 @@ export default function ResumeScorePage() {
             {/* Controls */}
             {!result && (
                 <Card className="p-8 text-center space-y-4">
-                    <FileText size={48} className="mx-auto text-blue-500" />
+                    <FileText size={48} className="mx-auto text-primary" />
                     <h2 className="text-xl font-semibold">Ready to analyze your resume?</h2>
-                    <p className="text-gray-500 max-w-md mx-auto">
+                    <p className="text-muted-foreground max-w-md mx-auto">
                         We will scan your resume for ATS compatibility, keyword density, and formatting issues.
                     </p>
                     <Button size="lg" onClick={handleAnalyze} disabled={loading || !resumeText}>
                         {loading ? <Loader2 className="animate-spin mr-2" /> : "Start Analysis"}
                     </Button>
-                    {!resumeText && <p className="text-red-500 text-sm">No resume found. Upload one in Profile (or in the JobPilot browser extension).</p>}
+                    {!resumeText && <p className="text-destructive text-sm">No resume found. Upload one in Profile (or in the JobPilot browser extension).</p>}
                 </Card>
             )}
 
             {result && (
                 <div className="space-y-8">
                     {/* Score Section */}
-                    <div className="flex flex-col md:flex-row gap-8 items-center justify-center p-8 bg-white rounded-lg shadow-sm border">
+                    <div className="flex flex-col md:flex-row gap-8 items-center justify-center p-8 bg-card rounded-[3px] border">
                         <div className="relative w-40 h-40 flex items-center justify-center">
                             <svg className="w-full h-full transform -rotate-90">
-                                <circle cx="80" cy="80" r="70" stroke="currentColor" strokeWidth="10" fill="transparent" className="text-gray-100" />
+                                <circle cx="80" cy="80" r="70" stroke="currentColor" strokeWidth="10" fill="transparent" className="text-muted-foreground" />
                                 <circle cx="80" cy="80" r="70" stroke="currentColor" strokeWidth="10" fill="transparent"
                                     strokeDasharray={440}
                                     strokeDashoffset={440 - (440 * result.score) / 100}
@@ -100,35 +100,35 @@ export default function ResumeScorePage() {
                         </div>
                         <div className="flex-1 space-y-2">
                             <h2 className="text-2xl font-bold">Overall Assessment</h2>
-                            <p className="text-gray-600 text-lg">{result.summary}</p>
+                            <p className="text-muted-foreground text-lg">{result.summary}</p>
                         </div>
                         <Button variant="outline" onClick={() => setResult(null)}>Re-Analyze</Button>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Critical Issues */}
-                        <Card className="p-6 border-red-100 bg-red-50/30">
-                            <h3 className="font-semibold text-red-700 flex items-center gap-2 mb-4">
+                        <Card className="p-6">
+                            <h3 className="font-semibold text-destructive flex items-center gap-2 mb-4">
                                 <AlertTriangle size={20} /> Critical Issues
                             </h3>
                             <ul className="space-y-2">
                                 {result.critical_issues.map((issue, i) => (
-                                    <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                                        <span className="text-red-500 mt-1">•</span> {issue}
+                                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                                        <span className="text-destructive mt-1">•</span> {issue}
                                     </li>
                                 ))}
                             </ul>
                         </Card>
 
                         {/* Strengths */}
-                        <Card className="p-6 border-green-100 bg-green-50/30">
-                            <h3 className="font-semibold text-green-700 flex items-center gap-2 mb-4">
+                        <Card className="p-6">
+                            <h3 className="font-semibold text-ok flex items-center gap-2 mb-4">
                                 <CheckCircle size={20} /> Strengths
                             </h3>
                             <ul className="space-y-2">
                                 {result.content_strengths.map((str, i) => (
-                                    <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                                        <span className="text-green-500 mt-1">•</span> {str}
+                                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                                        <span className="text-ok mt-1">•</span> {str}
                                     </li>
                                 ))}
                             </ul>
@@ -136,17 +136,17 @@ export default function ResumeScorePage() {
                     </div>
 
                     {/* Improvement Plan */}
-                    <Card className="p-6 border-blue-100 bg-blue-50/30">
-                        <h3 className="font-semibold text-blue-700 flex items-center gap-2 mb-4">
+                    <Card className="p-6 bg-card">
+                        <h3 className="font-semibold text-primary flex items-center gap-2 mb-4">
                             <Lightbulb size={20} /> Action Plan
                         </h3>
                         <div className="grid grid-cols-1 gap-4">
                             {result.improvement_plan.map((step, i) => (
-                                <div key={i} className="flex items-center gap-4 bg-white p-3 rounded border border-blue-100">
-                                    <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold flex-shrink-0">
+                                <div key={i} className="flex items-center gap-4 bg-card p-3 rounded border border-border">
+                                    <span className="w-8 h-8 rounded-[3px] text-primary flex items-center justify-center font-bold flex-shrink-0">
                                         {i + 1}
                                     </span>
-                                    <span className="text-sm font-medium text-gray-700">{step}</span>
+                                    <span className="text-sm font-medium text-muted-foreground">{step}</span>
                                 </div>
                             ))}
                         </div>
@@ -155,11 +155,11 @@ export default function ResumeScorePage() {
                     {/* Formatting */}
                     {result.formatting_issues.length > 0 && (
                         <Card className="p-6">
-                            <h3 className="font-semibold text-gray-700 mb-4">Formatting & ATS Check</h3>
+                            <h3 className="font-semibold text-muted-foreground mb-4">Formatting & ATS Check</h3>
                             <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                 {result.formatting_issues.map((issue, i) => (
-                                    <li key={i} className="text-sm text-gray-500 flex items-center gap-2">
-                                        <AlertTriangle size={14} className="text-yellow-500" /> {issue}
+                                    <li key={i} className="text-sm text-muted-foreground flex items-center gap-2">
+                                        <AlertTriangle size={14} className="text-warn" /> {issue}
                                     </li>
                                 ))}
                             </ul>
