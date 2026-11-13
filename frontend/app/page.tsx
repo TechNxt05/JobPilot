@@ -31,6 +31,11 @@ export default function TodayPage() {
   const [name, setName] = useState(UI_PREVIEW ? "Amritanshu" : "");
   const [quota, setQuota] = useState<{ remaining: number; limit: number } | null>(UI_PREVIEW ? { remaining: 14, limit: 20 } : null);
   const [error, setError] = useState<string | null>(null);
+  // The page is prerendered at build time, so today's date is set in the browser only (avoids a hydration mismatch)
+  const [date, setDate] = useState<string | null>(null);
+  useEffect(() => {
+    Promise.resolve().then(() => setDate(new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })));
+  }, []);
 
   useEffect(() => {
     if (UI_PREVIEW) return;
@@ -74,7 +79,6 @@ export default function TodayPage() {
     router.push(to);
   }
 
-  const date = new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
   const summary = [
     scan?.boards ? `${scan.boards.matched} matching roles on the boards${freshCount ? `, ${freshCount} posted in the last 2 days` : ""}` : "No scan yet",
     `${followUps.length} follow-up${followUps.length === 1 ? "" : "s"} due`,
@@ -86,7 +90,7 @@ export default function TodayPage() {
       {UI_PREVIEW && <p className="note-warn mb-4 rounded-[3px] px-3 py-2 text-sm">Local UI preview: every company, person and number on this page is synthetic.</p>}
       <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-[40px] md:text-[48px]">Chart for {date}</h1>
+          <h1 className="text-[40px] md:text-[48px]">{date ? `Chart for ${date}` : "Today's chart"}</h1>
           <p className="mt-2 max-w-[80ch] text-muted-foreground">{name ? `${name}, here's your search. ` : ""}{summary}.</p>
         </div>
         <FindPanel live={live} at={scan?.at ?? null} scan={scan} />
