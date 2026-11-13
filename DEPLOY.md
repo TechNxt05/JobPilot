@@ -33,6 +33,7 @@ Legend: ✅ done · ⬜ to do · 🔍 check (likely done, not yet confirmed)
 | 4 | Extension production build pointing at the Vercel site | ⬜ |
 | 5 | End-to-end checks | ⬜ |
 | 6 | Chrome Web Store submission | ⬜ |
+| 7 | Google Cloud cost guards now; move the backend off Google Cloud before 9 Feb 2027 | ⬜ |
 
 ### Do next, in this order
 1. **Fix email (step 1.2).** The website shows "Error sending confirmation email" (Supabase `POST /auth/v1/otp` → 500) because custom SMTP points at a Gmail address with no valid password. Set up Gmail SMTP with an app password (below). No redeploy is needed; reload the login page afterwards.
@@ -179,6 +180,33 @@ Live at `https://job-pilot-orcin.vercel.app`.
 
 ## 6. Chrome Web Store ⬜
 After step 5 passes: upload the zip from step 4 at the Chrome Web Store Developer Dashboard (one-time $5 developer fee). Use `extension/store/LISTING.md` for the listing text and `extension/store/PRIVACY.md` for the privacy policy.
+
+## 7. Future plan: Google Cloud billing and moving the backend
+
+**Status (Nov 2026):** the Google Cloud account was upgraded to a paid account by mistake. Upgrading itself charges nothing. The ₹28,569 trial credits still pay first, until **9 Feb 2027**. Keep the UPI autopay on: cancelling it doesn't stop costs and may get the billing account suspended (which takes the API offline).
+
+**Plan:** keep the backend on Cloud Run for 1–2 months (until about Jan 2027), watch the bill, then move it to a free host and shut the Google Cloud project down **before 9 Feb 2027**.
+
+### Now: keep Google Cloud at ₹0
+- [ ] **Budget alert:** Billing → Budgets & alerts → Create budget, ₹100/month, alerts at 50/90/100%, *untick "include credits"* (so it warns about real spending).
+- [ ] **Image cleanup:** Artifact Registry → `cloud-run-source-deploy` (asia-south1) → Edit → Cleanup policies → keep the 2 most recent versions + delete older than 7 days. Delete old versions now.
+- [ ] **Source bucket:** Cloud Storage → `run-sources-fresh-shell-470006-n3-asia-south1` → Lifecycle → delete objects older than 7 days.
+- [ ] **Delete the broken trigger:** Cloud Build → Triggers → `rmgpgab-jobpilot-api…` → Delete.
+- [x] Cloud Run: min instances 0, max 3.
+
+### January 2027: decide
+- **Bill still about ₹0** → staying is fine. Cloud Run's free tier doesn't expire with the credits; the only steady cost is image storage (≈ ₹10–20/month).
+- **Want zero risk** → move the backend (below), then shut down Google Cloud.
+
+### Where to move the backend (ranked)
+1. **Hugging Face Spaces (Docker).** Free, no time limit, no card. 2 vCPU / 16 GB on the free tier, runs the existing Dockerfile with Chromium. Sleeps after ~48 h idle, so the first request after that takes about a minute. Changes needed: listen on port 7860, add the same env vars as Space secrets, set Vercel's `NEXT_PUBLIC_API_URL` to the Space URL. `CORS_ORIGINS` stays the Vercel address.
+2. **Drop Playwright, run everything on Vercel.** One free host. Job search uses Serper + the ATS job-board APIs (Discover already works this way). Sites that build pages with JavaScript would be searched less well.
+3. **Not AWS:** new AWS accounts no longer get a 12-month free tier (since July 2025 it's credits on a ~6-month free plan), so it would hit the same deadline. Check aws.amazon.com/free if this changes.
+
+### Shutting down Google Cloud (after the move)
+1. Point Vercel `NEXT_PUBLIC_API_URL` at the new backend and redeploy Vercel; check Chat and Search work.
+2. IAM & Admin → Settings → **Shut down** project `fresh-shell-470006-n3`.
+3. Billing → Account management → **Close billing account**. Nothing can be charged after this.
 
 ## Costs and safety
 - **AI:** each signed-in user gets at most `ai_config.daily_limit` hosted actions per day across the website and extension. Users with their own keys don't use your quota.
