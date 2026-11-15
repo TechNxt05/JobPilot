@@ -42,6 +42,7 @@ export async function saveResume(resume: StoredResume): Promise<void> {
 export async function deleteResume(id: string): Promise<void> {
   const all = await getResumes();
   await chrome.storage.local.set({ resumes: all.filter((r) => r.id !== id) });
+  await chrome.storage.local.remove(`pdf:${id}`);
   await addTombstone("resumes", id);
 }
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { analyzeResume, scoreATS, type StoredResume } from "@internova/core";
 import { deleteResume, saveResume } from "../storage";
 import { pdfToText } from "../pdf";
+import { putResumePdf } from "../resumeFiles";
 
 export function ResumesView({ resumes, onAdded }: { resumes: StoredResume[]; onAdded?: (r: StoredResume) => void }) {
   const [name, setName] = useState("");
@@ -9,7 +10,7 @@ export function ResumesView({ resumes, onAdded }: { resumes: StoredResume[]; onA
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function add(text: string, fallbackName: string, links: string[] = []) {
+  async function add(text: string, fallbackName: string, links: string[] = [], pdf?: Uint8Array) {
     const clean = text.trim();
     if (clean.split(/\s+/).length < 50) {
       setError("That resume has very little text. If it's a scanned PDF, export a text-based PDF or paste the text instead.");
@@ -17,6 +18,8 @@ export function ResumesView({ resumes, onAdded }: { resumes: StoredResume[]; onA
     }
     const resume = { id: crypto.randomUUID(), name: name.trim() || fallbackName, text: clean, addedAt: Date.now(), ...(links.length ? { links } : {}) };
     await saveResume(resume);
+    // Keep the original PDF so Autofill can attach it to application forms
+    if (pdf) await putResumePdf(resume.id, pdf).catch(() => {});
     onAdded?.(resume);
     setName("");
     setPasted("");
@@ -32,7 +35,7 @@ export function ResumesView({ resumes, onAdded }: { resumes: StoredResume[]; onA
     setError(null);
     try {
       const pdf = await pdfToText(file);
-      await add(pdf.text, file.name.replace(/\.pdf$/i, ""), pdf.links);
+      await add(pdf.text, file.name.replace(/\.pdf$/i, ""), pdf.links, new Uint8Array(await file.arrayBuffer()));
     } catch {
       setError("Couldn't read that PDF.");
     } finally {

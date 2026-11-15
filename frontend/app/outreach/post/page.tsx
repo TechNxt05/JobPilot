@@ -8,6 +8,7 @@ import { detectAtsVendor, gmailComposeUrl, mailtoUrl, newApplication, type AtsVe
 import { Button, Card, Input } from "@/components/ui";
 import { saveApplication } from "@/lib/data";
 import { UPGRADE_JOB_KEY } from "@/lib/handoff";
+import { HiringPostFinder } from "@/components/HiringPostFinder";
 
 interface Official { title: string; url: string; applyUrl: string; location: string; ats: string; postedAt: string | null; similarity: number; text: string }
 interface Result {
@@ -96,9 +97,14 @@ export default function JobPostPage() {
         </p>
       </div>
 
+      <HiringPostFinder onUse={(t, u) => {
+        setText(t); setPostUrl(u); setRes(null);
+        document.getElementById("post-text")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }} />
+
       <Card className="p-4">
         <form onSubmit={run} className="space-y-3">
-          <textarea required rows={10} className={area} value={text} onChange={(e) => setText(e.target.value)} placeholder={"Paste the whole post, e.g.\n\n“We're hiring a Backend Engineer (0–2 yrs) in Bengaluru… Share your resume at careers@company.com with subject 'Backend Engineer - Name'. Mention notice period.”"} />
+          <textarea id="post-text" required rows={10} className={area} value={text} onChange={(e) => setText(e.target.value)} placeholder={"Paste the whole post, e.g.\n\n“We're hiring a Backend Engineer (0–2 yrs) in Bengaluru… Share your resume at careers@company.com with subject 'Backend Engineer - Name'. Mention notice period.”"} />
           <div className="flex flex-col md:flex-row gap-2">
             <Input value={postUrl} onChange={(e) => setPostUrl(e.target.value)} placeholder="Post link (optional): https://www.linkedin.com/posts/…" />
             <Button type="submit" disabled={busy || text.trim().length < 60} className="md:w-56">

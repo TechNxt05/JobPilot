@@ -26,21 +26,21 @@ Legend: ✅ done · ⬜ to do · 🔍 check (likely done, not yet confirmed)
 | 3 | Website deployed on Vercel | ✅ |
 | 1.3 | Supabase Site URL + Redirect URL set to the Vercel address | ✅ |
 | 2.4 | Cloud Run env vars (AI keys, Supabase) added | 🔍 |
-| 3.5 | Cloud Run `CORS_ORIGINS` set to the Vercel address | ⬜ |
-| 1.1 | Supabase migrations `20261110000000_ai_quota.sql` and `20261113000000_discovery_contacts.sql` run | ⬜ |
-| 1.2 | Email sending fixed (Gmail SMTP now, Resend + own domain later) | ⬜ **← next: sign-in fails until this is done** |
+| 3.5 | Cloud Run `CORS_ORIGINS` set to the Vercel address | ✅ |
+| 1.1 | Supabase migrations `20261110000000_ai_quota.sql` and `20261113000000_discovery_contacts.sql` run | ✅ |
+| 1.2 | Email sending fixed (Gmail SMTP now, Resend + own domain later) | ✅ Gmail SMTP |
 | 2.6 | Broken Cloud Build trigger disabled | ⬜ |
 | 4 | Extension production build pointing at the Vercel site | ⬜ |
 | 5 | End-to-end checks | ⬜ |
 | 6 | Chrome Web Store submission | ⬜ |
 | 7 | Google Cloud cost guards now; move the backend off Google Cloud before 9 Feb 2027 | ⬜ |
+| 8 | Nov 2026 update: profile, answer library, contacts seed, careers pages, hiring-post search, **daily job agent + resume attach** (section 8) | ⬜ |
 
 ### Do next, in this order
-1. **Fix email (step 1.2).** The website shows "Error sending confirmation email" (Supabase `POST /auth/v1/otp` → 500) because custom SMTP points at a Gmail address with no valid password. Set up Gmail SMTP with an app password (below). No redeploy is needed; reload the login page afterwards.
-2. **Set `CORS_ORIGINS` on Cloud Run (step 3.5).** Without it the website's Chat page can't reach the API.
-3. **Run both migrations (step 1.1).** Without them the hosted AI quota checks fail, and the Discover settings and Outreach contacts can't be saved.
-4. **Disable the old Cloud Build trigger (step 2.6)**, so pushes stop sending build-failure emails.
-5. **Build the extension (step 4)** and run the checks in step 5.
+1. **Section 8 (Nov 2026 update):** load your HR contacts, reload the extension, try the new pages.
+2. **Delete or restrict the old Cloud Build trigger (step 2.6)**, so pushes stop starting builds.
+3. **Cost guards (section 7, "Now")**: budget alert, image cleanup, source bucket lifecycle.
+4. **Build the extension (step 4)** and run the checks in step 5.
 
 ---
 
@@ -207,6 +207,61 @@ After step 5 passes: upload the zip from step 4 at the Chrome Web Store Develope
 1. Point Vercel `NEXT_PUBLIC_API_URL` at the new backend and redeploy Vercel; check Chat and Search work.
 2. IAM & Admin → Settings → **Shut down** project `fresh-shell-470006-n3`.
 3. Billing → Account management → **Close billing account**. Nothing can be charged after this.
+
+## 8. Nov 2026 update ⬜
+
+### What's new
+| Feature | Where |
+|---|---|
+| Replace or rename a resume (keeps its name and place) | Profile → Resumes |
+| Best-matching resume per job (cover letter, Resume Upgrade, cold email, post reply, AI answers) | automatic |
+| **Fill my profile from this**: write about yourself in plain words; AI fills only *empty* fields, saved answers and new library questions (1 AI action) | Profile → Tell JobPilot about yourself |
+| **Question & answer library**: add any question, write the answer or **Draft with AI**, edit, delete. Shared with the extension's autofill | Profile → Your questions & answers; extension → Profile → Answer library |
+| **Add one contact** (email, company, name, title, notes) | Outreach → Add contact |
+| **Add any careers page** to Discover: JobPilot finds the Greenhouse / Lever / Ashby board behind it, or reads the jobs it publishes as structured data | Discover → Boards → Add |
+| **Find hiring posts**: public LinkedIn / X posts (via Google) and Hacker News "Who is hiring?"; save their emails to contacts, or reply in one click | Outreach → Reply to a hiring post |
+| Fairer resume checker (more action verbs; skills / certificate lists aren't judged as bullets) | Resume score, Profile |
+| **Daily jobs**: every morning (by ~9 AM IST) JobPilot checks your Discover boards with your saved filters, keeps new jobs in an inbox (To review / Applied / Dismissed) and emails you one digest with scores, flags and Apply links. Each job is emailed once | Website → Daily |
+| **Resume attach in Autofill**: the extension puts a PDF into the form's resume upload field: your best-matching saved resume, or the one-page tailored PDF from Analyze → Apply kit (preselected for 12 h after you make it) | Extension → Autofill → Resume upload |
+
+### Your steps
+- [ ] **Push** (Vercel redeploys the website by itself). The backend doesn't need a redeploy for this update.
+- [ ] **Vercel env:** make sure `SERPER_API_KEY` is set (it already is if cover-letter research works). Without it the LinkedIn / X post search is off; Hacker News still works. Serper's free plan is 2,500 searches; one post search uses 2.
+- [ ] **Load your HR contacts:** Supabase → SQL Editor → paste `DesktopProject - 2JobPilot-datacontacts_seed.sql` → Run. 120 emails; 79 ready to use, 41 marked *Do not contact* (2 Deloitte onboarding addresses and the old 40-address list with dead domains). Re-running it is safe. This file stays outside the repo.
+- [ ] **Extension:** `npm run package -w @internova/extension`, then chrome://extensions → JobPilot → Reload.
+- [ ] **Try:** Profile → write a paragraph in *Tell JobPilot about yourself* → Fill my profile from this; add a question with Draft with AI; Discover → add a company's own careers page; Outreach → Reply to a hiring post → Find hiring posts.
+
+### Daily job agent: one-time setup
+1. **Migration:** Supabase → SQL Editor → run `supabase/migrations/20261116000000_job_agent.sql`.
+2. **Vercel → Settings → Environment Variables (Production)**, then redeploy:
+   | Name | Value |
+   |---|---|
+   | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API Keys → **secret** key (`sb_secret_…`). Server only: never prefix it with `NEXT_PUBLIC_` |
+   | `CRON_SECRET` | Any long random string (e.g. from a password manager, 32+ characters). Vercel sends it to the cron route; nobody else can trigger it |
+   | `SMTP_USER` | The Gmail address that sends the digest |
+   | `SMTP_PASS` | Its 16-letter Gmail **app password** (the same kind used for Supabase sign-in email) |
+   | `MAIL_FROM` (optional) | e.g. `JobPilot <you@gmail.com>` |
+   | `NEXT_PUBLIC_SITE_URL` (optional) | `https://job-pilot-orcin.vercel.app` (links in the email; Vercel's own address is used if unset) |
+3. **Turn it on:** website → **Daily** → tick "Check every morning", Save. Press **Check & email** once to test.
+4. **Check it ran:** Vercel → project → Settings → Cron Jobs shows `/api/cron/daily` at `30 2 * * *` (UTC). On the free (Hobby) plan it runs once a day at some point in that hour, so between 8:00 and 9:00 IST. Crons run only on the production deployment.
+
+**How it works:** Vercel calls `/api/cron/daily` → for each user with the agent on: fetch their Discover boards and careers pages → filter and score (no AI, so no AI quota) → insert into `agent_jobs` (jobs already there are skipped, so nothing is emailed twice) → email the new ones that have no blocker and meet the chosen minimum score. Jobs dismissed or never opened are deleted after 60 days.
+
+**Apply flow:** email or Daily page → **Apply** opens the company's real form → JobPilot extension → **Autofill → Scan application form** → review → **Fill + attach resume** → you check and submit. For a tailored one-page resume first: on the job description page, **Analyze → Apply kit → Tailor**, then go to the form and scan. (Resumes added in the extension before this update have no saved PDF: re-upload them once. Resumes uploaded on the website are fetched from your private storage when signed in.)
+
+**Limits:** one run a day on Vercel Hobby (5 minutes for everyone; users who don't fit are first in line the next day). Gmail allows about 500 emails a day. LinkedIn / Indeed / Naukri are not checked by the agent (no permitted access); use the extension on those pages.
+
+### How JobPilot finds jobs (and what it can't do)
+| Source | How | Limits |
+|---|---|---|
+| Company job boards (Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee) | Their official public JSON APIs, from Vercel. No scraping | Only companies on those systems |
+| A company's own careers page | Vercel fetches the page and reads the board it links to, or its schema.org `JobPosting` data (the same data Google for Jobs reads) | Pages that draw jobs with JavaScript only can't be read; use the extension there |
+| LinkedIn / X hiring posts | A Google search through Serper (`site:linkedin.com/posts hiring "<role>" email`). We read Google's preview: title, snippet, link | We never log in to or crawl LinkedIn (its terms forbid it and accounts get banned). Snippets are short, so an email may be cut off: open the post and paste the full text into *Reply to a hiring post* |
+| Hacker News "Who is hiring?" (Y Combinator's forum) | Official HN API (Algolia), full comment text, emails decoded from "name [at] company [dot] com" | Mostly US / remote roles; one thread a month |
+| LinkedIn Jobs, Indeed, Naukri, Internshala, Wellfound (YC startups) | **In your browser, through the extension:** open a job → Analyze / Autofill reads the page you're already logged in to | No server-side scraping: these sites block bots and forbid it |
+| Chat page "search jobs" | Backend (Cloud Run): Serper / DuckDuckGo search, then Playwright reads public result pages | Slower; best effort |
+
+**Later (not built):** Hacker News posts in the daily email; Wellfound / YC "Work at a Startup" lists (no public API, needs the extension); reading DMs is never planned (no API, and it'd need your LinkedIn password).
 
 ## Costs and safety
 - **AI:** each signed-in user gets at most `ai_config.daily_limit` hosted actions per day across the website and extension. Users with their own keys don't use your quota.

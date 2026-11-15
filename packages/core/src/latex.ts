@@ -38,6 +38,8 @@ export function latexToText(tex: string): string {
   const begin = body.indexOf("\\begin{document}");
   const end = body.lastIndexOf("\\end{document}");
   if (begin >= 0) body = body.slice(begin + "\\begin{document}".length, end > begin ? end : undefined);
+  // Lists drawn without a bullet (itemize[label={}], used for skills rows) render as plain lines
+  body = body.replace(/\\begin\{itemize\}\[[^\]]*label=\{\}[^\]]*\]([\s\S]*?)\\end\{itemize\}/g, (_m, inner: string) => `\n${inner.replace(/\\item\b/g, "\n")}\n`);
   body = body
     .replace(/\\(item)\b(\[[^\]]*\])?/g, "\n• ")
     .replace(/\\\\(\[[^\]]*\])?/g, "\n")

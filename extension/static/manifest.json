@@ -30,7 +30,8 @@
     "sidePanel",
     "storage",
     "scripting",
-    "activeTab"
+    "activeTab",
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "https://*.linkedin.com/*",

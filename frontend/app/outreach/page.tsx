@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Copy, ExternalLink, Loader2, Mail, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, Copy, ExternalLink, Loader2, Mail, Plus, Sparkles, Trash2, Upload, X } from "lucide-react";
 import {
   addDays,
   companyKey,
   CONTACT_STATUSES,
   worksAt,
   gmailComposeUrl,
+  isEmail,
   mailtoUrl,
   OUTREACH_STATUSES,
   parseContactsCsv,
@@ -31,6 +32,7 @@ export default function OutreachPage() {
   const [outreach, setOutreach] = useState("");
   const [limit, setLimit] = useState(PAGE);
   const [showImport, setShowImport] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
   const [drafting, setDrafting] = useState<Contact | null>(null);
   const [job, setJob] = useState<JobContext | null>(null);
 
@@ -93,11 +95,13 @@ export default function OutreachPage() {
         </div>
         <div className="flex gap-2">
           <Link href="/outreach/post"><Button><Sparkles size={16} className="mr-2" /> Reply to a hiring post</Button></Link>
+          <Button variant="outline" onClick={() => setShowAdd((v) => !v)}><Plus size={16} className="mr-2" /> Add contact</Button>
           <Button variant="outline" onClick={() => setShowImport((v) => !v)}><Upload size={16} className="mr-2" /> Import contacts</Button>
         </div>
       </div>
 
       {error && <p className="text-destructive text-sm" role="alert">{error}</p>}
+      {showAdd && <AddContact existing={contacts} onAdded={() => { setShowAdd(false); reload(); setError(null); }} />}
       {showImport && <ImportPanel onDone={(n) => { setShowImport(false); reload(); setError(null); alert(`${n} contacts imported.`); }} />}
 
       {due.length > 0 && (
@@ -177,6 +181,44 @@ export default function OutreachPage() {
         />
       )}
     </div>
+  );
+}
+
+/** Add one recruiter / HR email to your list (an existing email is updated, not duplicated). */
+function AddContact({ existing, onAdded }: { existing: Contact[]; onAdded: () => void }) {
+  const [f, setF] = useState({ company: "", email: "", name: "", title: "", country: "India", notes: "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+  const dup = existing.find((c) => c.email.toLowerCase() === f.email.trim().toLowerCase());
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!isEmail(f.email)) return setErr("That doesn't look like an email address.");
+    if (!f.company.trim()) return setErr("Add the company name.");
+    setBusy(true); setErr(null);
+    try {
+      await importContacts([{ company: f.company.trim(), email: f.email.trim(), name: f.name.trim(), title: f.title.trim(), country: f.country.trim(), city: "", department: "", roleTags: [], source: "Added manually", linkedin: "", notes: f.notes.trim() }]);
+      onAdded();
+    } catch (e2) { setErr((e2 as Error).message); } finally { setBusy(false); }
+  }
+
+  return (
+    <Card className="p-4">
+      <form onSubmit={save} className="grid grid-cols-1 gap-2 md:grid-cols-3">
+        <Input required placeholder="Email *" type="email" value={f.email} onChange={set("email")} />
+        <Input required placeholder="Company *" value={f.company} onChange={set("company")} />
+        <Input placeholder="Name" value={f.name} onChange={set("name")} />
+        <Input placeholder="Title (e.g. Talent Partner)" value={f.title} onChange={set("title")} />
+        <Input placeholder="Country" value={f.country} onChange={set("country")} />
+        <Input placeholder="Notes (role, where you found it)" value={f.notes} onChange={set("notes")} />
+        <div className="md:col-span-3 flex flex-wrap items-center gap-3">
+          <Button type="submit" disabled={busy}>{busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} {dup ? "Update contact" : "Add contact"}</Button>
+          {dup && <span className="text-xs text-muted-foreground">Already in your list ({dup.company}); saving updates it.</span>}
+          {err && <span className="text-sm text-destructive">{err}</span>}
+        </div>
+      </form>
+    </Card>
   );
 }
 

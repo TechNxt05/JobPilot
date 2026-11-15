@@ -86,7 +86,7 @@ export default function DiscoverPage() {
     const app = newApplication({
       title: j.title, company: j.company, url: j.url, location: j.location,
       score: j.score, resumeName: j.resumeName ?? "", deadline: j.deadline ?? "",
-      notes: `Found via ${ATS_LABELS[j.ats]} board.`,
+      notes: `Found via ${j.sourceLabel ?? `${ATS_LABELS[j.ats]} board`}.`,
     });
     try {
       await saveApplication(app);
@@ -106,7 +106,7 @@ export default function DiscoverPage() {
   function tailor(j: RankedJob) {
     try {
       // The board type is also the ATS, so the resume is tailored for that system
-      sessionStorage.setItem(UPGRADE_JOB_KEY, JSON.stringify({ company: j.company, role: j.title, text: j.text, url: j.applyUrl, ats: j.ats }));
+      sessionStorage.setItem(UPGRADE_JOB_KEY, JSON.stringify({ company: j.company, role: j.title, text: j.text, url: j.applyUrl, ats: j.sourceLabel ? undefined : j.ats }));
     } catch { /* storage unavailable */ }
     router.push("/resume-upgrade");
   }
@@ -243,7 +243,7 @@ function JobRow({ job: j, tracked, onTrack, onEmail, onTailor }: { job: RankedJo
         <Button size="sm" variant="outline" onClick={onEmail}>
           <Mail size={14} className="mr-1" /> {j.contacts ? `Email a recruiter (${j.contacts})` : "Email a recruiter"}
         </Button>
-        {j.text && <Button size="sm" variant="outline" onClick={onTailor} title={`Tailor your resume for ${ATS_LABELS[j.ats]}`}><FileText size={14} className="mr-1" /> Tailor resume</Button>}
+        {j.text && <Button size="sm" variant="outline" onClick={onTailor} title={`Tailor your resume for ${j.sourceLabel ?? ATS_LABELS[j.ats]}`}><FileText size={14} className="mr-1" /> Tailor resume</Button>}
         {j.text && <Button size="sm" variant="ghost" onClick={() => setOpen((v) => !v)}>{open ? "Hide description" : "Description"}</Button>}
       </div>
       {open && <pre className="whitespace-pre-wrap text-sm font-sans text-muted-foreground max-h-96 overflow-auto border-t pt-2">{j.text}</pre>}
@@ -255,23 +255,53 @@ function Boards({ settings, setSettings, result }: { settings: DiscoverySettings
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [info, setInfo] = useState<string | null>(null);
   const hidden = new Set(settings.hidden);
   const status = new Map(result?.boards.map((b) => [`${b.ats}:${b.ats === "smartrecruiters" ? b.slug : b.slug.toLowerCase()}`, b]) ?? []);
 
-  function add(e: React.FormEvent) {
+  /** Add boards (deduped; a hidden default is switched back on) and return the next settings. */
+  function withBoards(base: DiscoverySettings, found: JobSource[], label: string): DiscoverySettings {
+    let next = base;
+    for (const src of found) {
+      const key = sourceKey(src);
+      if (DEFAULT_SOURCES.some((d) => sourceKey(d) === key)) next = { ...next, hidden: next.hidden.filter((h) => h !== key) };
+      else if (!next.sources.some((s) => sourceKey(s) === key)) next = { ...next, sources: [...next.sources, { ...src, company: label || src.company }] };
+    }
+    return next;
+  }
+
+  async function add(e: React.FormEvent) {
     e.preventDefault();
+    setErr(null); setInfo(null);
     const src = sourceFromUrl(url);
-    if (!src) {
-      setErr("Paste a careers link from Greenhouse, Lever, Ashby, SmartRecruiters, Workable or Recruitee (e.g. jobs.lever.co/company).");
+    if (src) {
+      setSettings(withBoards(settings, [src], name.trim()));
+      setUrl(""); setName("");
       return;
     }
-    const key = sourceKey(src);
-    if (DEFAULT_SOURCES.some((d) => sourceKey(d) === key)) {
-      setSettings({ ...settings, hidden: settings.hidden.filter((h) => h !== key) });
-    } else if (!settings.sources.some((s) => sourceKey(s) === key)) {
-      setSettings({ ...settings, sources: [...settings.sources, { ...src, company: name.trim() || src.company }] });
+    // Not a known ATS link: read the page for the board it uses, or the jobs it publishes as structured data
+    setChecking(true);
+    try {
+      const r = await fetch("/api/careers-page", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+      const out = await r.json();
+      if (!r.ok) throw new Error(out.error ?? `Failed (${r.status})`);
+      const label = name.trim() || out.company;
+      if (out.boards.length) {
+        setSettings(withBoards(settings, out.boards, out.boards.length === 1 ? label : ""));
+        setInfo(`That page uses ${out.boards.map((b: JobSource) => ATS_LABELS[b.ats]).join(", ")}. Added ${out.boards.length === 1 ? "its board" : "its boards"}.`);
+      } else if (out.jobs > 0) {
+        if (!settings.pages.some((p) => p.url === out.url)) setSettings({ ...settings, pages: [...settings.pages, { url: out.url, company: label }] });
+        setInfo(`Added. The page lists ${out.jobs} job${out.jobs === 1 ? "" : "s"} JobPilot can read.`);
+      } else {
+        throw new Error("No job board or job data found on that page. It probably loads jobs with JavaScript. Open it in Chrome and use the JobPilot extension's Analyze, or find the company's Greenhouse / Lever / Ashby link.");
+      }
+      setUrl(""); setName("");
+    } catch (e2) {
+      setErr((e2 as Error).message);
+    } finally {
+      setChecking(false);
     }
-    setUrl(""); setName(""); setErr(null);
   }
 
   const row = (s: JobSource, custom: boolean) => {
@@ -295,12 +325,25 @@ function Boards({ settings, setSettings, result }: { settings: DiscoverySettings
   return (
     <div className="border-t pt-4 space-y-3">
       <form onSubmit={add} className="flex flex-col md:flex-row gap-2">
-        <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Add a company: paste its careers link, e.g. https://jobs.ashbyhq.com/company" />
+        <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Add a company: paste any careers page or job board link, e.g. https://company.com/careers" />
         <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (optional)" className="md:max-w-48" />
-        <Button type="submit" variant="outline"><Plus size={16} className="mr-1" /> Add</Button>
+        <Button type="submit" variant="outline" disabled={checking || !url.trim()}>{checking ? <Loader2 size={16} className="mr-1 animate-spin" /> : <Plus size={16} className="mr-1" />} Add</Button>
       </form>
       {err && <p className="text-destructive text-xs">{err}</p>}
+      {info && <p className="text-xs text-muted-foreground">{info}</p>}
       <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1">
+        {settings.pages.map((p) => {
+          const st = result?.boards.find((b) => b.ats === "page" && b.slug === p.url);
+          return (
+            <li key={p.url} className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked readOnly aria-label={`Watching ${p.company}`} />
+              <a href={p.url} target="_blank" rel="noreferrer" className="hover:underline">{p.company}</a>
+              <span className="text-xs text-muted-foreground">Careers page</span>
+              {st && <span className={`text-xs ${st.error ? "text-destructive" : "text-muted-foreground"}`}>{st.error ?? `${st.jobs} open`}</span>}
+              <button className="ml-auto text-muted-foreground hover:text-foreground" aria-label={`Remove ${p.company}`} onClick={() => setSettings({ ...settings, pages: settings.pages.filter((x) => x.url !== p.url) })}><X size={14} /></button>
+            </li>
+          );
+        })}
         {settings.sources.map((s) => row(s, true))}
         {DEFAULT_SOURCES.map((s) => row(s, false))}
       </ul>

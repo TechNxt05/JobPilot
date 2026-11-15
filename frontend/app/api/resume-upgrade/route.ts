@@ -4,6 +4,7 @@ import {
   atsVendorCheck,
   detectAtsVendor,
   latexToText,
+  pickResumeForJob,
   resumeText as tailoredText,
   type AtsVendor,
   compileLatex,
@@ -47,8 +48,9 @@ export async function POST(req: Request) {
   // Target ATS: chosen explicitly, else detected from the job link; its rules steer the tailoring
   const jobUrl = clampText(body.jobUrl, 2000);
   const vendor: AtsVendor = typeof body.ats === "string" && body.ats in ATS_PROFILES && body.ats !== "unknown" ? (body.ats as AtsVendor) : detectAtsVendor(jobUrl);
-  const baseText = userLatex ? latexToText(userLatex) : resumes[0]?.text ?? "";
-  const input = { profile, resumeText: resumes[0]?.text ?? "", job, atsHints: atsTailorHints(vendor, baseText, jobDescription) };
+  const chosen = pickResumeForJob(resumes, job)?.text ?? "";
+  const baseText = userLatex ? latexToText(userLatex) : chosen;
+  const input = { profile, resumeText: chosen, job, atsHints: atsTailorHints(vendor, baseText, jobDescription) };
   const atsOf = (text: string) => atsVendorCheck(text, { title: job.title, text: jobDescription, url: jobUrl || null }, vendor);
   const atsBefore = baseText ? atsOf(baseText) : null;
 

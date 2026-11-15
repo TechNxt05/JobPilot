@@ -19,6 +19,7 @@ import {
 } from "@internova/core";
 import { send } from "../messages";
 import { getProfile } from "../storage";
+import { resumeFileName, setTailoredPdf } from "../resumeFiles";
 
 type TailorResult =
   | ({ mode: "latex" } & LatexTailorResult)
@@ -90,6 +91,12 @@ export function ApplyKit({ job, resumeId, keySet, goTo }: { job: JobPosting; res
   const [tailorBusy, setTailorBusy] = useState("");
   const [tailorErr, setTailorErr] = useState<string | null>(null);
 
+  /** The latest tailored PDF is offered in Autofill for this job's resume upload field. */
+  async function keepForAutofill(bytes: Uint8Array) {
+    const p = await getProfile();
+    await setTailoredPdf({ bytes, name: resumeFileName(p?.firstName ?? "", p?.lastName ?? "", `Resume_${slug}`), jobUrl: job.url ?? "", jobTitle: job.title ?? "", company: job.company ?? "", at: Date.now() }).catch(() => {});
+  }
+
   async function runTailor() {
     setTailorErr(null);
     setPdf(null);
@@ -104,6 +111,7 @@ export function ApplyKit({ job, resumeId, keySet, goTo }: { job: JobPosting; res
         result = { ...result, resume: out.resume };
         setTailoredTex(out.latex);
         setPdf({ url: pdfUrl(out.pdf), pages: out.pages });
+        await keepForAutofill(out.pdf);
       } else {
         let compiled = await compileLatex(result.latex);
         let pages = await pdfPageCount(compiled.pdf);
@@ -118,6 +126,7 @@ export function ApplyKit({ job, resumeId, keySet, goTo }: { job: JobPosting; res
         }
         setTailoredTex(result.latex);
         setPdf({ url: pdfUrl(compiled.pdf), pages });
+        await keepForAutofill(compiled.pdf);
       }
     } catch (e) {
       setTailorErr(`PDF: ${compileErr(e)}`);
@@ -194,6 +203,7 @@ export function ApplyKit({ job, resumeId, keySet, goTo }: { job: JobPosting; res
             {report.repeatedVerbs.length > 0 && <p className="small muted">Repeated verbs: {report.repeatedVerbs.map((v) => `${v.verb} ×${v.count}`).join(", ")}</p>}
             <div className="row gap">
               {pdf && <button className="btn small primary" onClick={() => download(pdf.url, `Resume_${slug}.pdf`)}>Download PDF</button>}
+              {pdf && <span className="muted small">Ready to attach: Autofill offers it for this job's resume upload.</span>}
               {tailoredTex && <button className="btn small" onClick={() => openInOverleaf(tailoredTex, `Resume_${slug}.tex`)}>Open in Overleaf</button>}
               {tailoredTex && <button className="btn small ghost" onClick={() => download(URL.createObjectURL(new Blob([tailoredTex], { type: "application/x-tex" })), `Resume_${slug}.tex`)}>.tex</button>}
             </div>

@@ -1,4 +1,4 @@
-import { emailSignature, generateColdEmail } from "@internova/core";
+import { emailSignature, generateColdEmail, pickResumeForJob } from "@internova/core";
 import { aiGate, json } from "@/lib/ai";
 import { clampText, loadUserData } from "@/lib/userData";
 
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   try {
     const email = await generateColdEmail(ai, {
       profile,
-      resumeText: resumes[0]?.text,
+      resumeText: pickResumeForJob(resumes, job)?.text,
       contact,
       job,
       target: clampText(body.target, 200) || undefined,

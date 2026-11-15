@@ -18,3 +18,5 @@ export * from "./contacts";
 export * from "./atsvendors";
 export * from "./jobpost";
 export * from "./pdftext";
+export * from "./notes";
+export * from "./posts";

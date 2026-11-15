@@ -9,6 +9,7 @@ import {
   scanPost,
   writePostReplies,
   ATS_LABELS,
+  pickResumeForJob,
   type Contact,
 } from "@internova/core";
 import { aiGate, json } from "@/lib/ai";
@@ -49,10 +50,12 @@ export async function POST(req: Request) {
       details.company ? researchCompany(details.company, details.role, { serperKey: process.env.SERPER_API_KEY, signal: AbortSignal.timeout(15000), limit: 5 }).catch(() => []) : Promise.resolve([]),
     ]);
     const best = official[0] ?? null;
+    // Best-matching resume for this role (official description when found, else the post)
+    const resumeText = pickResumeForJob(resumes, { title: details.role, text: best?.job.text || text })?.text ?? "";
 
     const replies = await writePostReplies(ai, {
       profile,
-      resumeText: resumes[0]?.text,
+      resumeText,
       postText: text,
       details,
       research,
@@ -62,7 +65,7 @@ export async function POST(req: Request) {
     const contacts = details.company
       ? contactsForCompany(details.company, (contactRows ?? []) as Contact[]).slice(0, 10).map((c) => ({ id: c.id, email: c.email, name: c.name, title: c.title }))
       : [];
-    const ats = postAtsReport(resumes[0]?.text ?? "", details, best, text);
+    const ats = postAtsReport(resumeText, details, best, text);
 
     return json({
       details,

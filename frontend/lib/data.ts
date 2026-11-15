@@ -5,7 +5,7 @@
  * (`data` = the full record incl. id + updatedAt, `updated_at` ms, soft deletes via `deleted_at`),
  * so the web app and the extension share one profile, resume list and tracker.
  */
-import { normalizeProfile, type Application, type CandidateProfile, type StoredResume } from "@internova/core";
+import { normalizeProfile, type Application, type CandidateProfile, type SavedAnswer, type StoredResume } from "@internova/core";
 import { supabase } from "./supabase/client";
 
 async function uid(): Promise<string> {
@@ -93,4 +93,28 @@ export async function deleteApplication(id: string): Promise<void> {
   const user_id = await uid();
   const now = Date.now();
   check(await supabase().from("applications").upsert({ user_id, id, data: null, updated_at: now, deleted_at: now }, { onConflict: "user_id,id" }));
+}
+
+/* ------------------------------ answer library ------------------------------ */
+// Same records as the extension's answer library (synced through the "answers" table).
+
+export async function listAnswers(): Promise<SavedAnswer[]> {
+  const rows = check(await supabase().from("answers").select("data").is("deleted_at", null)) as { data: SavedAnswer }[];
+  return rows.map((r) => r.data).filter(Boolean).sort((a, b) => a.question.localeCompare(b.question));
+}
+
+export async function saveAnswerRecord(entry: Pick<SavedAnswer, "question" | "answer"> & { id?: string }): Promise<SavedAnswer> {
+  const user_id = await uid();
+  const saved: SavedAnswer = { id: entry.id ?? crypto.randomUUID(), question: entry.question.trim(), answer: entry.answer.trim(), updatedAt: Date.now() };
+  check(await supabase().from("answers").upsert(
+    { user_id, id: saved.id, data: saved, updated_at: saved.updatedAt, deleted_at: null },
+    { onConflict: "user_id,id" },
+  ));
+  return saved;
+}
+
+export async function deleteAnswerRecord(id: string): Promise<void> {
+  const user_id = await uid();
+  const now = Date.now();
+  check(await supabase().from("answers").upsert({ user_id, id, data: null, updated_at: now, deleted_at: now }, { onConflict: "user_id,id" }));
 }

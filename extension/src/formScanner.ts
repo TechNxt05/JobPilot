@@ -181,3 +181,38 @@ export function fillFields(items: FillItem[]): FillResult[] {
   }
   return results;
 }
+
+export interface AttachItem {
+  iid: string;
+  /** File contents, base64 */
+  b64: string;
+  name: string;
+}
+
+/**
+ * Runs INSIDE the page. Puts a PDF into a file upload field (the same as choosing it in the file picker), then
+ * fires input/change so the site uploads or shows it. Self-contained: no outer references.
+ */
+export function attachFile(item: AttachItem): FillResult {
+  const el = document.querySelector(`[data-internova-id="${CSS.escape(item.iid)}"]`) as HTMLInputElement | null;
+  if (!el || el.type !== "file") return { iid: item.iid, ok: false, error: "Upload field no longer on the page" };
+  try {
+    const raw = atob(item.b64);
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    const file = new File([bytes], item.name, { type: "application/pdf", lastModified: Date.now() });
+    const accept = (el.accept || "").toLowerCase();
+    if (accept && !/pdf|application\/\*|\*\/\*/.test(accept)) return { iid: item.iid, ok: false, error: `This field accepts ${el.accept}, not PDF` };
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    el.files = dt.files;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    const box = (el.closest("label, .field, .form-group, [class*='upload'], [class*='Upload']") ?? el.parentElement ?? el) as HTMLElement;
+    box.style.outline = "2px solid #3355ff";
+    box.style.outlineOffset = "2px";
+    return { iid: item.iid, ok: el.files?.length === 1 };
+  } catch (e) {
+    return { iid: item.iid, ok: false, error: (e as Error).message };
+  }
+}

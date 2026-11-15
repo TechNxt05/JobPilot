@@ -10,6 +10,7 @@ import { cn } from "@/components/ui";
 
 const PRIMARY = [
   { href: "/", label: "Today" },
+  { href: "/daily", label: "Daily" },
   { href: "/discover", label: "Discover" },
   { href: "/internships", label: "Search" },
   { href: "/applications", label: "Jobs" },

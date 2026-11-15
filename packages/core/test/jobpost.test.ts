@@ -121,3 +121,31 @@ describe("ATS vendors", () => {
     expect(atsTailorHints("lever").join(" ")).toMatch(/human reads/);
   });
 });
+
+describe("multiple resumes and notes", () => {
+  it("picks the resume that best matches the job, else the newest", async () => {
+    const { pickResumeForJob } = await import("../src");
+    const ai = { id: "ai", name: "AI", addedAt: 1, text: "SKILLS\nPython, PyTorch, LangChain, RAG, FAISS, LLMs, Hugging Face\nPROJECTS\n• Built a RAG chatbot with LangChain and FAISS" };
+    const sde = { id: "sde", name: "SDE", addedAt: 2, text: "SKILLS\nJava, Spring Boot, MySQL, Redis, Docker, Kafka\nPROJECTS\n• Built REST APIs in Spring Boot with MySQL and Redis" };
+    const jd = "Backend Engineer. Requirements: Java, Spring Boot, MySQL, Redis, Kafka, Docker, REST APIs. 0-2 years of experience required for this backend role.";
+    expect(pickResumeForJob([ai, sde], { text: jd })?.id).toBe("sde");
+    expect(pickResumeForJob([ai, sde], { text: "Applied AI Engineer: Python, LangChain, RAG, FAISS, LLMs, PyTorch, Hugging Face. Build retrieval systems for our product team." })?.id).toBe("ai");
+    expect(pickResumeForJob([ai, sde], null)?.id).toBe("sde");
+  });
+
+  it("merges notes without overwriting and skips duplicate library questions", async () => {
+    const { mergeNotes, newLibraryEntries, EMPTY_PROFILE } = await import("../src");
+    const base = { ...EMPTY_PROFILE, city: "Lucknow", skills: ["Python"], answers: { start_date: "Immediately" } };
+    const { profile, filled } = mergeNotes(base, {
+      fields: { city: "Pune", country: "India" }, skills: ["python", "Groq"], certifications: [], achievements: [],
+      answers: { start_date: "30 days", expected_stipend: "12 LPA" }, qa: [],
+    });
+    expect(profile.city).toBe("Lucknow");
+    expect(profile.country).toBe("India");
+    expect(profile.skills).toEqual(["Python", "Groq"]);
+    expect(profile.answers).toMatchObject({ start_date: "Immediately", expected_stipend: "12 LPA" });
+    expect(filled).toEqual(["country", "1 skills", "1 saved answers"]);
+    expect(newLibraryEntries([{ question: "Which LLMs have you used?", answer: "x" }, { question: "New one?", answer: "y" }], [{ id: "1", question: "which LLMs have you used", answer: "z", updatedAt: 0 }]))
+      .toEqual([{ question: "New one?", answer: "y" }]);
+  });
+});

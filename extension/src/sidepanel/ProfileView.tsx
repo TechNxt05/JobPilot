@@ -249,7 +249,7 @@ export function ProfileView({ resumes, keySet }: { resumes: StoredResume[]; keyS
         ))}
       </Section>
 
-      <AnswersCard />
+      <AnswersCard keySet={keySet} />
 
       <div className="sticky-actions">
         <button className="btn primary block" onClick={() => persist(profile).then(() => setStatus({ kind: "ok", text: "Profile saved." }))} disabled={!dirty}>
@@ -336,8 +336,22 @@ function ListText({ value, separator, rows, placeholder, onCommit }: { value: st
   return <textarea rows={rows} value={text} placeholder={placeholder} onChange={(e) => setText(e.target.value)} onBlur={commit} />;
 }
 
-function AnswersCard() {
+function AnswersCard({ keySet }: { keySet: boolean }) {
   const [answers, setAnswers] = useState<SavedAnswer[]>([]);
+  const [q, setQ] = useState("");
+  const [a, setA] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  async function draft() {
+    if (!q.trim()) return setErr("Type the question first.");
+    setBusy(true);
+    setErr(null);
+    const res = await send<Record<string, string>>({ type: "draft-answers", questions: [{ id: "q", question: q.trim() }], job: null });
+    setBusy(false);
+    if (!res.ok) return setErr(res.error);
+    if (!res.data.q?.trim()) return setErr("The AI couldn't answer that from your profile. Write it yourself.");
+    setA(res.data.q.trim());
+  }
   const refresh = () => getAnswers().then(setAnswers);
   useEffect(() => {
     refresh();
@@ -347,7 +361,17 @@ function AnswersCard() {
   }, []);
   return (
     <Section title={`Answer library (${answers.length})`}>
-      <p className="muted small">Answers you approve on forms (for questions not in the list above) are saved here and suggested for similar questions.</p>
+      <p className="muted small">Your own questions and answers (also editable on the website). Autofill suggests the closest one when a form asks something similar.</p>
+      <div className="stack">
+        <input value={q} placeholder="New question, e.g. Which LLMs have you used?" onChange={(e) => setQ(e.target.value)} />
+        <textarea rows={4} value={a} placeholder="Your answer (or draft it with AI, then edit)" onChange={(e) => setA(e.target.value)} />
+        <div className="row gap">
+          <button className="btn" disabled={!q.trim() || !a.trim()} onClick={async () => { await saveAnswer(q, a); setQ(""); setA(""); }}>Add</button>
+          <button className="btn ghost" disabled={!keySet || busy || !q.trim()} onClick={draft}>{busy ? "Drafting…" : "Draft with AI"}</button>
+        </div>
+        {!keySet && <span className="muted small">Turn on AI in Settings to draft answers.</span>}
+        {err && <p className="small error-text">{err}</p>}
+      </div>
       {answers.map((a) => <AnswerItem key={a.id} answer={a} />)}
     </Section>
   );

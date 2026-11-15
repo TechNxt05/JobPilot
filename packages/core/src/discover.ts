@@ -43,6 +43,8 @@ export interface DiscoveredJob {
   postedAt: string | null;
   /** Plain-text description ("" when the list endpoint has none) */
   text: string;
+  /** Shown instead of the ATS name for jobs read from a company's own careers page */
+  sourceLabel?: string;
 }
 
 /** Companies verified to have a public board (Nov 2026). Users can add more by pasting a careers URL. */

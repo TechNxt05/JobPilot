@@ -75,7 +75,7 @@ export default function TodayPage() {
     } catch (e) { setError((e as Error).message); }
   }
   function handoff(key: string, j: RankedJob, to: string) {
-    try { sessionStorage.setItem(key, JSON.stringify(key === UPGRADE_JOB_KEY ? { company: j.company, role: j.title, text: j.text, url: j.applyUrl, ats: j.ats } : { title: j.title, company: j.company, url: j.url, text: j.text })); } catch { /* storage blocked */ }
+    try { sessionStorage.setItem(key, JSON.stringify(key === UPGRADE_JOB_KEY ? { company: j.company, role: j.title, text: j.text, url: j.applyUrl, ats: j.sourceLabel ? undefined : j.ats } : { title: j.title, company: j.company, url: j.url, text: j.text })); } catch { /* storage blocked */ }
     router.push(to);
   }
 

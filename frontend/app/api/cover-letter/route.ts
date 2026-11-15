@@ -1,4 +1,4 @@
-import { generateCoverLetter, researchCompany, type CoverLetterTone } from "@internova/core";
+import { generateCoverLetter, pickResumeForJob, researchCompany, type CoverLetterTone } from "@internova/core";
 import { aiGate, json } from "@/lib/ai";
 import { clampText, loadUserData } from "@/lib/userData";
 
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
   try {
     const letter = await generateCoverLetter(ai, {
       profile,
-      resumeText: resumes[0]?.text,
+      resumeText: pickResumeForJob(resumes, { title: role, text: jobDescription })?.text,
       job: { title: role || null, company: company || null, text: jobDescription },
       research,
       tone,

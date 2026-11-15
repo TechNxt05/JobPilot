@@ -130,3 +130,36 @@ describe("profileFromResume on a LaTeX-style resume", () => {
     expect(p.education[0]).toMatchObject({ school: "Indian Institute of Information Technology, Pune", degree: "B.Tech", major: "Computer Science and Engineering", startYear: "2022", endYear: "2026", cgpa: "8.4" });
   });
 });
+
+describe("resume checker fairness", () => {
+  it("counts plain verbs and keeps skill rows out of the bullet checks", async () => {
+    const { analyzeResume, latexToText } = await import("../src");
+    const text = [
+      "EXPERIENCE",
+      "• Reviewed how LLMs handled real pull requests",
+      "• Set up Docker sandboxes with pinned dependencies",
+      "• Used Gemini Vision to read UPI IDs from screenshots",
+      "TECHNICAL SKILLS",
+      "• Languages: Python, C++",
+      "• Backend: FastAPI, Django",
+    ].join("\n");
+    const r = analyzeResume(text);
+    expect(r.bullets).toHaveLength(3);
+    expect(r.actionVerbBullets).toHaveLength(3);
+
+    const tex = String.raw`\begin{document}
+\section{Projects}
+\begin{itemize}
+  \item Built a thing.
+\end{itemize}
+\section{Technical Skills}
+\begin{itemize}[leftmargin=0pt, label={}, itemsep=2pt]
+  \item \textbf{Languages:} Python, C++
+\end{itemize}
+\end{document}`;
+    const t = latexToText(tex);
+    expect(t).toContain("• Built a thing.");
+    expect(t).toContain("Languages: Python, C++");
+    expect(t).not.toContain("• Languages");
+  });
+});

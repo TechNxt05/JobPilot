@@ -1,4 +1,4 @@
-import { draftAnswers, normalizeProfile, profileToContext, type DraftQuestion, type JobPosting, type StoredResume } from "@internova/core";
+import { draftAnswers, normalizeProfile, pickResumeForJob, profileToContext, type DraftQuestion, type JobPosting, type StoredResume } from "@internova/core";
 import { aiGate, json } from "@/lib/ai";
 
 /** POST { questions: [{id, question}], job? } → { answers: { id: text } }. Drafts only from the user's own profile. */
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   const resumes = ((res ?? []) as { data: StoredResume }[]).map((r) => r.data).filter(Boolean).sort((a, b) => b.addedAt - a.addedAt);
 
   try {
-    const answers = await draftAnswers(ai, questions, { profile: profileToContext(profile, resumes[0]?.text ?? ""), job: body?.job ?? null });
+    const answers = await draftAnswers(ai, questions, { profile: profileToContext(profile, pickResumeForJob(resumes, body?.job ?? null)?.text ?? ""), job: body?.job ?? null });
     return json({ answers }, 200, headers);
   } catch (e) {
     return json({ error: (e as Error).message }, 502);

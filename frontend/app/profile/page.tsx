@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Save, Trash2, Upload } from "lucide-react";
+import { Loader2, Pencil, RefreshCw, Save, Sparkles, Trash2, Upload } from "lucide-react";
 import {
   analyzeResume,
+  mergeNotes,
+  newLibraryEntries,
+  type NotesExtraction,
   BASIC_FIELDS,
   COMMON_QUESTIONS,
   EMPTY_EDUCATION,
@@ -22,7 +25,8 @@ import {
 } from "@internova/core";
 import { Button, Card, Input } from "@/components/ui";
 import { readResumePdf } from "@/lib/pdf";
-import { deleteResume, listResumes, loadProfile, saveProfile, saveResume } from "@/lib/data";
+import { deleteResume, listAnswers, listResumes, loadProfile, saveAnswerRecord, saveProfile, saveResume } from "@/lib/data";
+import { AnswerLibrary } from "@/components/AnswerLibrary";
 
 type Status = { kind: "info" | "ok" | "error"; text: string } | null;
 
@@ -56,6 +60,58 @@ export default function ProfilePage() {
     setProfile(s);
     setSaved(s);
     return s;
+  }
+
+  const [extracting, setExtracting] = useState(false);
+  const [libraryKey, setLibraryKey] = useState(0);
+  const [renaming, setRenaming] = useState<string | null>(null);
+
+  /** Swap the file behind a resume, keeping its name and place; the profile is left as you edited it. */
+  async function onReplace(r: StoredResume, file: File) {
+    if (file.size > 5 * 1024 * 1024) return setStatus({ kind: "error", text: "Resume must be 5 MB or smaller." });
+    setStatus({ kind: "info", text: `Replacing “${r.name}”…` });
+    try {
+      const pdf = await readResumePdf(file);
+      if (pdf.text.split(/\s+/).length < 50) throw new Error("That PDF has very little text. If it's a scan or an image, export a text-based PDF.");
+      const next = await saveResume({ ...r, text: pdf.text, links: pdf.links.length ? pdf.links : undefined, addedAt: r.addedAt }, file);
+      setResumes((all) => all.map((x) => (x.id === r.id ? next : x)));
+      setStatus({ kind: "ok", text: `Replaced “${r.name}”. Upload it as a new resume instead if you also want your profile refilled from it.` });
+    } catch (e) {
+      setStatus({ kind: "error", text: (e as Error).message });
+    }
+  }
+
+  async function onRename(r: StoredResume, name: string) {
+    setRenaming(null);
+    const clean = name.trim();
+    if (!clean || clean === r.name) return;
+    const next = await saveResume({ ...r, name: clean });
+    setResumes((all) => all.map((x) => (x.id === r.id ? next : x)));
+  }
+
+  /** "Tell JobPilot about yourself" → AI extracts details, saved answers and Q&A; only empty fields are filled. */
+  async function fillFromNotes() {
+    const notes = profile.additionalInfo.trim();
+    if (notes.length < 20) return setStatus({ kind: "error", text: "Write a few sentences in the box first." });
+    setExtracting(true);
+    setStatus({ kind: "info", text: "Reading your notes…" });
+    try {
+      const res = await fetch("/api/profile-notes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes }) });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? `Failed (${res.status})`);
+      const ex = body as NotesExtraction;
+      const { profile: merged, filled } = mergeNotes(latest.current, ex);
+      await persist(merged);
+      const fresh = newLibraryEntries(ex.qa, await listAnswers().catch(() => []));
+      for (const x of fresh) await saveAnswerRecord(x);
+      if (fresh.length) setLibraryKey((k) => k + 1);
+      const parts = [...filled, fresh.length ? `${fresh.length} new questions in your library` : ""].filter(Boolean);
+      setStatus({ kind: "ok", text: parts.length ? `Filled from your notes: ${parts.join(", ")}. Nothing you'd already written was changed.` : "Nothing new found: your profile already has everything these notes say." });
+    } catch (e) {
+      setStatus({ kind: "error", text: (e as Error).message });
+    } finally {
+      setExtracting(false);
+    }
   }
 
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -132,20 +188,38 @@ export default function ProfilePage() {
           </label>
         </div>
         {resumes.length === 0 && <p className="text-sm text-muted-foreground">No resumes yet. Uploading one fills your profile automatically.</p>}
+        {resumes.length > 1 && (
+          <p className="text-sm text-muted-foreground">
+            You have {resumes.length} resumes. For each job, JobPilot uses the one that matches it best (cover letters, tailoring, cold emails, post replies, and Analyze in the extension). Give them clear names, e.g. &ldquo;AI Engineer&rdquo; and &ldquo;SDE&rdquo;.
+          </p>
+        )}
         <ul className="divide-y divide-border">
           {resumes.map((r) => {
             const a = analyzeResume(r.text);
             return (
-              <li key={r.id} className="py-3 flex items-center justify-between gap-4">
-                <div>
-                  <div className="font-medium">{r.name}</div>
-                  <div className="text-xs text-muted-foreground">{a.wordCount} words · {a.skills.size} skills · ATS {scoreATS(a).score}/100 · added {new Date(r.addedAt).toLocaleDateString()}</div>
+              <li key={r.id} className="py-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  {renaming === r.id ? (
+                    <Input autoFocus defaultValue={r.name} aria-label="Resume name" className="h-8 max-w-xs"
+                      onBlur={(e) => onRename(r, e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") onRename(r, (e.target as HTMLInputElement).value); if (e.key === "Escape") setRenaming(null); }} />
+                  ) : (
+                    <div className="font-medium">{r.name}</div>
+                  )}
+                  <div className="text-xs text-muted-foreground">{a.wordCount} words · {a.skills.size} skills · ATS {scoreATS(a).score}/100 · {r.updatedAt && r.updatedAt !== r.addedAt ? `updated ${new Date(r.updatedAt).toLocaleDateString()}` : `added ${new Date(r.addedAt).toLocaleDateString()}`}</div>
                 </div>
-                <Button variant="ghost" size="sm" aria-label={`Delete ${r.name}`} onClick={async () => {
-                  if (!confirm(`Delete “${r.name}”?`)) return;
-                  await deleteResume(r.id);
-                  setResumes((all) => all.filter((x) => x.id !== r.id));
-                }}><Trash2 size={16} /></Button>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => setRenaming(r.id)} aria-label={`Rename ${r.name}`}><Pencil size={14} /> Rename</Button>
+                  <label className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-[3px] px-3 font-narrow text-[13px] font-semibold tracking-[0.04em] hover:bg-accent">
+                    <RefreshCw size={14} aria-hidden /> Replace
+                    <input type="file" accept="application/pdf,.pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onReplace(r, f); }} />
+                  </label>
+                  <Button variant="ghost" size="sm" aria-label={`Delete ${r.name}`} onClick={async () => {
+                    if (!confirm(`Delete “${r.name}”?`)) return;
+                    await deleteResume(r.id);
+                    setResumes((all) => all.filter((x) => x.id !== r.id));
+                  }}><Trash2 size={16} /></Button>
+                </div>
               </li>
             );
           })}
@@ -204,10 +278,15 @@ export default function ProfilePage() {
         <Field label="Achievements (one per line)" wide><ListText value={profile.achievements} separator={"\n"} rows={3} onCommit={(v) => set("achievements", v)} /></Field>
       </Section>
 
-      <Section title="Additional information" open>
-        <p className="text-sm text-muted-foreground">Anything autofill and AI should know that isn't in your resume: LLMs and tools you've used, hours you can commit, preferred locations, demo links…</p>
+      <Section title="Tell JobPilot about yourself" open>
+        <p className="text-sm text-muted-foreground">
+          Anything that isn&apos;t in your resume: tools and LLMs you&apos;ve used, notice period, expected pay, where you&apos;ll work, links. Then press <strong>Fill my profile from this</strong>: AI picks out the details and fills matching fields, saved answers and your question library. It only fills empty fields and never changes what you&apos;ve written.
+        </p>
         <TextArea rows={6} value={profile.additionalInfo} onChange={(v) => set("additionalInfo", v)}
-          placeholder="e.g. Built agents with LangGraph + GPT-4o and Llama 3 (Groq). Available full-time May–Aug 2026. Open to Bengaluru or remote." />
+          placeholder="e.g. Built agents with LangGraph, GPT-4o and Llama 3 on Groq. Notice period: 30 days. Expecting 12 LPA. Open to Bengaluru, Hyderabad or remote. Portfolio: …" />
+        <Button variant="outline" onClick={fillFromNotes} disabled={extracting || profile.additionalInfo.trim().length < 20}>
+          {extracting ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} Fill my profile from this
+        </Button>
       </Section>
 
       <Section title="Common questions" open>
@@ -236,6 +315,10 @@ export default function ProfilePage() {
             })}
           </div>
         ))}
+      </Section>
+
+      <Section title="Your questions & answers" open>
+        <AnswerLibrary refreshKey={libraryKey} />
       </Section>
 
       <div className="fixed bottom-0 inset-x-0 border-t border-border bg-background/95 backdrop-blur p-3">

@@ -56,7 +56,14 @@ const ACTION_VERBS = new Set(
     "maintained managed mentored migrated optimized orchestrated organized owned pioneered prototyped published reduced " +
     "refactored researched resolved scaled shipped spearheaded streamlined tested trained transformed wrote coordinated " +
     "delivered devised facilitated formulated generated initiated modeled modelled programmed redesigned revamped " +
-    "simplified accelerated authored contributed fine-tuned benchmarked containerized"
+    "simplified accelerated authored contributed fine-tuned benchmarked containerized " +
+    // Plain, everyday verbs are just as strong on a resume
+    "added used reviewed set helped ran cleaned labelled labeled replaced brought explored pulled handled extended " +
+    "rebuilt rewrote upgraded tracked traced fixed cut lowered raised grew saved turned measured monitored tuned wired " +
+    "ported configured hosted supported analysed visualized visualised predicted classified extracted parsed scraped " +
+    "indexed compared assessed audited investigated diagnosed identified boosted documented presented taught " +
+    "co-built co-founded founded released open-sourced partnered headed operated introduced converted detected " +
+    "modernized modernised secured validated verified surveyed calibrated simulated sped"
   ).split(/\s+/),
 );
 
@@ -184,7 +191,11 @@ export function analyzeResume(text: string, now = new Date()): ResumeAnalysis {
   const graduationYear = years.length ? Math.max(...years) : null;
 
   const expLines = sections.experience ?? [];
-  const bullets = lines.filter((l) => BULLET_RE.test(l)).map((l) => l.replace(BULLET_RE, ""));
+  // Skill and certification rows are lists, not achievement bullets: keep them out of the bullet checks
+  const LIST_SECTIONS = new Set<SectionName>(["skills", "certifications"]);
+  const bullets = lines
+    .filter((l) => BULLET_RE.test(l) && !LIST_SECTIONS.has(lineSection.get(l) as SectionName))
+    .map((l) => l.replace(BULLET_RE, ""));
   // Resumes without bullet glyphs: treat sentence-like lines inside experience/projects as bullets
   const bulletPool = bullets.length
     ? bullets

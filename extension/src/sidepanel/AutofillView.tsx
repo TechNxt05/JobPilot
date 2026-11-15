@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   EMPTY_PROFILE,
   getCommonQuestion,
+  pickResumeForJob,
   planAutofill,
   profileFromResume,
   type FieldPlan,
@@ -11,7 +12,8 @@ import {
   type ValueSource,
 } from "@internova/core";
 import { extractJobFromPage } from "../extractor";
-import { fillFields, scanFormFields, type FillItem, type FillResult, type ScannedField } from "../formScanner";
+import { attachFile, fillFields, scanFormFields, type AttachItem, type FillItem, type FillResult, type ScannedField } from "../formScanner";
+import { getResumePdf, getTailoredPdf, resumeFileName, toB64, type TailoredPdf } from "../resumeFiles";
 import { send } from "../messages";
 import { getAnswers, getProfile, saveAnswer, saveProfile } from "../storage";
 import { TrackButton } from "./TrackButton";
@@ -27,6 +29,18 @@ const rowKey = (r: { field: FormField }) => `${r.field.frameId}:${r.field.iid}`;
 /** Demographic / consent fields, uploads, unanswerable choices, date pickers: no input is offered. */
 const isLocked = (r: Row) =>
   (r.reason === "sensitive" && !r.questionId) || r.reason === "file" || r.reason === "format" || (r.reason === "choice" && !r.questionId);
+
+/** A file field that takes a resume (not a cover letter, transcript or photo). */
+const RESUME_FIELD = /resume|résumé|\bcv\b|curriculum/i;
+const OTHER_FILE = /cover|letter|transcript|photo|picture|portfolio|certificate|marksheet/i;
+const isResumeField = (f: FormField) => {
+  const t = `${f.label} ${f.name} ${f.id}`;
+  return RESUME_FIELD.test(t) && !/cover/i.test(t);
+};
+/** Tailored PDFs older than this aren't preselected (they were probably made for another job). */
+const TAILORED_FRESH_MS = 12 * 3600e3;
+
+interface Upload { choice: string; selected: boolean }
 
 const SOURCE_LABEL: Record<ValueSource, string> = {
   profile: "Profile",
@@ -51,6 +65,8 @@ export function AutofillView({ resumes, keySet, goTo }: Props) {
   const [usingResumeProfile, setUsingResumeProfile] = useState(false);
   const [job, setJob] = useState<JobPosting | null>(null);
   const [result, setResult] = useState<{ filled: number; failed: { label: string; error: string }[] } | null>(null);
+  const [tailored, setTailored] = useState<TailoredPdf | null>(null);
+  const [uploads, setUploads] = useState<Record<string, Upload>>({});
 
   async function draftRows(targets: Row[], jobCtx: JobPosting | null) {
     if (!targets.length) return;
@@ -101,6 +117,19 @@ export function AutofillView({ resumes, keySet, goTo }: Props) {
       // Job context for motivation answers (best effort; application pages often lack the description)
       const jobCtx = await runInPage<JobPosting>(extractJobFromPage).then((j) => (j && j.text.length > 200 ? j : null)).catch(() => null);
       setJob(jobCtx);
+
+      // Resume upload fields: preselect a fresh tailored PDF, else the saved resume that best matches this job
+      const t = await getTailoredPdf().catch(() => null);
+      setTailored(t);
+      const fileRows = plan.filter((r) => r.reason === "file");
+      const best = pickResumeForJob(resumes, jobCtx ? { title: jobCtx.title ?? "", text: jobCtx.text } : null);
+      const freshTailored = !!t && Date.now() - t.at < TAILORED_FRESH_MS;
+      const next: Record<string, Upload> = {};
+      for (const r of fileRows) {
+        const forResume = isResumeField(r.field) || (fileRows.length === 1 && !OTHER_FILE.test(`${r.field.label} ${r.field.name}`));
+        next[rowKey(r)] = { choice: forResume ? (freshTailored ? "tailored" : best?.id ?? "") : "", selected: forResume && (freshTailored || !!best) };
+      }
+      setUploads(next);
       // Questions the profile doesn't answer: one batched AI draft, reviewed before filling
       if (keySet) await draftRows(plan.filter((r) => r.aiDraftable && !r.value), jobCtx);
     } catch (e) {
@@ -116,6 +145,7 @@ export function AutofillView({ resumes, keySet, goTo }: Props) {
   }
 
   const toFill = rows?.filter((r) => r.selected && r.value.trim() && !isLocked(r)) ?? [];
+  const toAttach = rows?.filter((r) => r.reason === "file" && uploads[rowKey(r)]?.selected && uploads[rowKey(r)]?.choice) ?? [];
 
   async function fill() {
     if (!rows) return;
@@ -150,6 +180,24 @@ export function AutofillView({ resumes, keySet, goTo }: Props) {
     }
     if (profileChanged) await saveProfile(profile);
 
+    // Attach the chosen resume PDFs to their upload fields
+    const fileName = resumeFileName(profile.firstName, profile.lastName);
+    for (const r of toAttach) {
+      const u = uploads[rowKey(r)];
+      const bytes = u.choice === "tailored" ? tailored?.bytes ?? null : await getResumePdf(u.choice);
+      if (!bytes) {
+        results.push({ iid: r.field.iid, ok: false, error: "No PDF saved for that resume. Upload it again as a PDF in Profile → Resumes, then rescan." });
+        continue;
+      }
+      const item: AttachItem = { iid: r.field.iid, b64: toB64(bytes), name: u.choice === "tailored" && tailored ? tailored.name : fileName };
+      try {
+        const res = await runInFrame(r.field.frameId, attachFile, item);
+        results.push(res ?? { iid: r.field.iid, ok: false, error: "No response from the page" });
+      } catch (e) {
+        results.push({ iid: r.field.iid, ok: false, error: (e as Error).message });
+      }
+    }
+
     const labelOf = (iid: string) => rows.find((r) => r.field.iid === iid)?.field.label || iid;
     setResult({
       filled: results.filter((r) => r.ok).length,
@@ -160,7 +208,8 @@ export function AutofillView({ resumes, keySet, goTo }: Props) {
 
   const ready = rows?.filter((r) => r.action === "fill" && r.reason === null && r.source !== "ai" && r.source !== "library" && !r.questionId) ?? [];
   const questions = rows?.filter((r) => !ready.includes(r) && (r.questionId || r.reason === "open_question" || r.source === "library" || r.source === "ai") && !isLocked(r)) ?? [];
-  const needsYou = rows?.filter((r) => !ready.includes(r) && !questions.includes(r) && r.reason !== "unknown") ?? [];
+  const fileRows = rows?.filter((r) => r.reason === "file") ?? [];
+  const needsYou = rows?.filter((r) => !ready.includes(r) && !questions.includes(r) && r.reason !== "unknown" && r.reason !== "file") ?? [];
   const unknown = rows?.filter((r) => r.reason === "unknown") ?? [];
 
   return (
@@ -217,6 +266,33 @@ export function AutofillView({ resumes, keySet, goTo }: Props) {
             </Section>
           )}
 
+          {fileRows.length > 0 && (
+            <Section title={`Resume upload (${fileRows.length})`}>
+              {fileRows.map((r) => {
+                const k = rowKey(r);
+                const u = uploads[k] ?? { choice: "", selected: false };
+                return (
+                  <div key={k} className="field-row">
+                    <label className="check">
+                      <input type="checkbox" checked={u.selected} disabled={!u.choice} onChange={(e) => setUploads({ ...uploads, [k]: { ...u, selected: e.target.checked } })} />
+                      <span className="field-label">{r.field.label || r.field.name || "File upload"}</span>
+                      {r.field.frameId !== 0 && <span className="muted small">· embedded form</span>}
+                    </label>
+                    <select value={u.choice} onChange={(e) => setUploads({ ...uploads, [k]: { choice: e.target.value, selected: !!e.target.value } })}>
+                      <option value="">Don't attach (I'll upload it myself)</option>
+                      {tailored && <option value="tailored">Tailored: {tailored.jobTitle || "resume"}{tailored.company ? ` at ${tailored.company}` : ""} ({new Date(tailored.at).toLocaleDateString()})</option>}
+                      {resumes.map((res) => <option key={res.id} value={res.id}>{res.name}</option>)}
+                    </select>
+                    <p className="muted small">
+                      {u.choice === "tailored" ? "The one-page resume from Analyze → Apply kit." : u.choice ? "Your saved resume PDF (the best match for this job is preselected)." : "Choose a resume to attach, or upload it yourself."}
+                      {!tailored && " For a one-page tailored version, use Analyze → Apply kit → Tailor, then rescan."}
+                    </p>
+                  </div>
+                );
+              })}
+            </Section>
+          )}
+
           {needsYou.length > 0 && (
             <Section title={`Needs you (${needsYou.length})`}>
               {needsYou.map((r) => (
@@ -242,8 +318,8 @@ export function AutofillView({ resumes, keySet, goTo }: Props) {
           )}
 
           <div className="sticky-actions">
-            <button className="btn primary block" onClick={fill} disabled={busy || aiBusy || toFill.length === 0}>
-              Fill {toFill.length} selected field{toFill.length === 1 ? "" : "s"}
+            <button className="btn primary block" onClick={fill} disabled={busy || aiBusy || toFill.length + toAttach.length === 0}>
+              Fill {toFill.length} selected field{toFill.length === 1 ? "" : "s"}{toAttach.length ? " + attach resume" : ""}
             </button>
             <p className="hint center">JobPilot never clicks Submit.</p>
           </div>

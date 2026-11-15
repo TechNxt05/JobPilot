@@ -1,4 +1,4 @@
-import { DEFAULT_FILTERS, DEFAULT_SOURCES, isValidSource, sourceKey, type DiscoverFilters, type DiscoveredJob, type FitFlag, type JobSource } from "@internova/core";
+import { DEFAULT_FILTERS, DEFAULT_SOURCES, isPublicHttpUrl, isValidSource, sourceKey, type DiscoverFilters, type DiscoveredJob, type FitFlag, type JobSource } from "@internova/core";
 
 /** Stored in public.discovery_settings.data */
 export interface DiscoverySettings {
@@ -6,10 +6,14 @@ export interface DiscoverySettings {
   sources: JobSource[];
   /** sourceKey()s of default boards the user switched off */
   hidden: string[];
+  /** Company careers pages (not on a supported ATS) read for structured job data */
+  pages: CareersPage[];
   filters: DiscoverFilters;
 }
 
-export const EMPTY_SETTINGS: DiscoverySettings = { sources: [], hidden: [], filters: DEFAULT_FILTERS };
+export interface CareersPage { url: string; company: string }
+
+export const EMPTY_SETTINGS: DiscoverySettings = { sources: [], hidden: [], pages: [], filters: DEFAULT_FILTERS };
 
 const strList = (v: unknown, max: number) =>
   (Array.isArray(v) ? v : []).filter((x): x is string => typeof x === "string").map((x) => x.trim().slice(0, 60)).filter(Boolean).slice(0, max);
@@ -30,6 +34,12 @@ export function normalizeSettings(raw: unknown): DiscoverySettings {
   return {
     sources,
     hidden: strList(r.hidden, 100),
+    pages: (Array.isArray(r.pages) ? r.pages : [])
+      .map((p) => (p && typeof p === "object" ? p : {}) as Record<string, unknown>)
+      .filter((p) => typeof p.url === "string" && p.url.length <= 2000 && isPublicHttpUrl(p.url))
+      .map((p) => ({ url: String(p.url), company: String(p.company || new URL(String(p.url)).hostname).slice(0, 80) }))
+      .filter((p, i, all) => all.findIndex((x) => x.url === p.url) === i)
+      .slice(0, 30),
     filters: {
       keywords: Array.isArray(f.keywords) ? strList(f.keywords, 30) : DEFAULT_FILTERS.keywords,
       locations: Array.isArray(f.locations) ? strList(f.locations, 30) : DEFAULT_FILTERS.locations,

@@ -57,6 +57,18 @@ export function analyzeJobLocal(job: JobPosting, resumes: StoredResume[], requir
 }
 
 /**
+ * The resume to use for a job: the best match when there's a job description to compare against,
+ * otherwise the most recently added or edited one.
+ */
+export function pickResumeForJob(resumes: StoredResume[], job?: { title?: string | null; text: string } | null): StoredResume | undefined {
+  if (!resumes.length) return undefined;
+  const newest = [...resumes].sort((a, b) => (b.updatedAt ?? b.addedAt) - (a.updatedAt ?? a.addedAt))[0];
+  if (resumes.length === 1 || !job || job.text.trim().length < 80) return newest;
+  const best = analyzeJobLocal({ title: job.title ?? null, company: null, location: null, url: null, text: job.text, source: "pick" }, resumes).recommendedResumeId;
+  return resumes.find((r) => r.id === best) ?? newest;
+}
+
+/**
  * Full analysis: heuristic pass first (to pick the most relevant resume), then one AI call
  * for requirement extraction + grounded suggestions, then deterministic re-scoring.
  * Scores are always computed in code, never by the model. Falls back to the heuristic
