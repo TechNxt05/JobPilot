@@ -34,13 +34,13 @@ Legend: ✅ done · ⬜ to do · 🔍 check (likely done, not yet confirmed)
 | 5 | End-to-end checks | ⬜ |
 | 6 | Chrome Web Store submission | ⬜ |
 | 7 | Google Cloud cost guards now; move the backend off Google Cloud before 9 Feb 2027 | ⬜ |
-| 8 | Nov 2026 update: profile, answer library, contacts seed, careers pages, hiring-post search, **daily job agent + resume attach** (section 8) | ⬜ |
+| 8 | Nov 2026 update: profile, answer library, contacts seed, careers pages, hiring-post search, **daily job agent + resume attach** (section 8) | ✅ |
 
 ### Do next, in this order
-1. **Section 8 (Nov 2026 update):** load your HR contacts, reload the extension, try the new pages.
-2. **Delete or restrict the old Cloud Build trigger (step 2.6)**, so pushes stop starting builds.
-3. **Cost guards (section 7, "Now")**: budget alert, image cleanup, source bucket lifecycle.
-4. **Build the extension (step 4)** and run the checks in step 5.
+1. **Delete or restrict the old Cloud Build trigger (step 2.6)**, so pushes stop starting builds.
+2. **Cost guards (section 7, "Now")**: budget alert, image cleanup, source bucket lifecycle.
+3. **End-to-end checks (step 5)**, then the **Chrome Web Store** submission (step 6) when you want other people to use the extension.
+4. **January 2027:** decide whether to move the backend off Google Cloud (section 7) before the credits end on 9 Feb 2027.
 
 ---
 
@@ -208,7 +208,7 @@ After step 5 passes: upload the zip from step 4 at the Chrome Web Store Develope
 2. IAM & Admin → Settings → **Shut down** project `fresh-shell-470006-n3`.
 3. Billing → Account management → **Close billing account**. Nothing can be charged after this.
 
-## 8. Nov 2026 update ⬜
+## 8. Nov 2026 update ✅
 
 ### What's new
 | Feature | Where |
@@ -225,11 +225,11 @@ After step 5 passes: upload the zip from step 4 at the Chrome Web Store Develope
 | **Resume attach in Autofill**: the extension puts a PDF into the form's resume upload field: your best-matching saved resume, or the one-page tailored PDF from Analyze → Apply kit (preselected for 12 h after you make it) | Extension → Autofill → Resume upload |
 
 ### Your steps
-- [ ] **Push** (Vercel redeploys the website by itself). The backend doesn't need a redeploy for this update.
-- [ ] **Vercel env:** make sure `SERPER_API_KEY` is set (it already is if cover-letter research works). Without it the LinkedIn / X post search is off; Hacker News still works. Serper's free plan is 2,500 searches; one post search uses 2.
-- [ ] **Load your HR contacts:** Supabase → SQL Editor → paste `DesktopProject - 2JobPilot-datacontacts_seed.sql` → Run. 120 emails; 79 ready to use, 41 marked *Do not contact* (2 Deloitte onboarding addresses and the old 40-address list with dead domains). Re-running it is safe. This file stays outside the repo.
-- [ ] **Extension:** `npm run package -w @internova/extension`, then chrome://extensions → JobPilot → Reload.
-- [ ] **Try:** Profile → write a paragraph in *Tell JobPilot about yourself* → Fill my profile from this; add a question with Draft with AI; Discover → add a company's own careers page; Outreach → Reply to a hiring post → Find hiring posts.
+- [x] **Push** (Vercel redeploys the website by itself). The backend doesn't need a redeploy for this update.
+- [x] **Vercel env:** make sure `SERPER_API_KEY` is set (it already is if cover-letter research works). Without it the LinkedIn / X post search is off; Hacker News still works. Serper's free plan is 2,500 searches; one post search uses 2.
+- [x] **Load your HR contacts:** Supabase → SQL Editor → paste `Desktop/Project - 2/JobPilot-data/contacts_seed.sql` (and `contacts_seed_2.sql`, `profile_seed.sql`) → Run. 120 emails; 79 ready to use, 41 marked *Do not contact* (2 Deloitte onboarding addresses and the old 40-address list with dead domains). Re-running it is safe. This file stays outside the repo.
+- [x] **Extension:** `npm run package -w @internova/extension`, then chrome://extensions → JobPilot → Reload.
+- [x] **Try:** Profile → write a paragraph in *Tell JobPilot about yourself* → Fill my profile from this; add a question with Draft with AI; Discover → add a company's own careers page; Outreach → Reply to a hiring post → Find hiring posts.
 
 ### Daily job agent: one-time setup
 1. **Migration:** Supabase → SQL Editor → run `supabase/migrations/20261116000000_job_agent.sql`.

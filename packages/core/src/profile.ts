@@ -155,17 +155,64 @@ export function normalizeProfile(raw: unknown): CandidateProfile {
  * Fill only what's empty in `base` from `incoming`. Never overwrites the user's own values.
  * Skills are unioned; lists are taken only when the base list is empty.
  */
+/** Identity of a list entry, so the same project / job / paper from two resumes is kept once. */
+const entryKey = (s: string) => s.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, " ").trim();
+const LIST_KEYS = {
+  education: (e: EducationEntry) => entryKey(e.school) + "|" + entryKey(e.degree),
+  experience: (e: ExperienceEntry) => entryKey(e.company) + "|" + entryKey(e.title),
+  // Project names differ in subtitles across resume versions ("RAGOps - Enterprise RAG Platform" vs "RAGOps"): key on the first part
+  projects: (e: ProjectEntry) => entryKey(e.name.split(/\s[-–—|:]\s/)[0]),
+  publications: (e: PublicationEntry) => entryKey(e.title).slice(0, 60),
+};
+
+/**
+ * Fill a profile from another source (e.g. one more resume) without overwriting anything:
+ * empty fields are filled, and entries the profile doesn't have yet (projects, jobs, papers, skills,
+ * certificates) are added after the existing ones. Never mutates either input.
+ */
 export function mergeProfile(base: CandidateProfile, incoming: Partial<CandidateProfile>): CandidateProfile {
-  const out: CandidateProfile = { ...base, answers: { ...base.answers } };
+  const out: CandidateProfile = {
+    ...base,
+    answers: { ...base.answers },
+    education: base.education.map((e) => ({ ...e })),
+    experience: base.experience.map((e) => ({ ...e })),
+    projects: base.projects.map((e) => ({ ...e })),
+    publications: base.publications.map((e) => ({ ...e })),
+    skills: [...base.skills],
+    certifications: [...base.certifications],
+    achievements: [...base.achievements],
+  };
   const scalars = ["firstName", "lastName", "email", "phone", "city", "country", "linkedin", "github", "portfolio", "headline", "summary", "additionalInfo"] as const;
   for (const k of scalars) if (!out[k].trim() && incoming[k]?.trim()) out[k] = incoming[k]!.trim();
-  const lists = ["education", "experience", "projects", "publications"] as const;
-  for (const k of lists) if (!out[k].length && incoming[k]?.length) (out[k] as unknown[]) = incoming[k]!.map((e) => ({ ...e }));
-  for (const k of ["certifications", "achievements"] as const) if (!out[k].length && incoming[k]?.length) out[k] = [...incoming[k]!];
-  if (incoming.skills?.length) {
-    const seen = new Set(out.skills.map((s) => s.toLowerCase()));
-    for (const s of incoming.skills) if (s.trim() && !seen.has(s.toLowerCase())) { out.skills.push(s.trim()); seen.add(s.toLowerCase()); }
-  }
+
+  const addEntries = <T extends object>(have: T[], more: T[] | undefined, key: (e: T) => string) => {
+    const seen = new Set(have.map(key).filter((k) => k.replace(/\|/g, "")));
+    for (const e of more ?? []) {
+      const k = key(e);
+      if (!k.replace(/\|/g, "") || seen.has(k)) continue;
+      seen.add(k);
+      have.push({ ...e });
+    }
+  };
+  addEntries(out.education, incoming.education, LIST_KEYS.education);
+  addEntries(out.experience, incoming.experience, LIST_KEYS.experience);
+  addEntries(out.projects, incoming.projects, LIST_KEYS.projects);
+  addEntries(out.publications, incoming.publications, LIST_KEYS.publications);
+  // Fill a missing link on an entry we already had
+  for (const p of out.projects) if (!p.link) p.link = incoming.projects?.find((q) => LIST_KEYS.projects(q) === LIST_KEYS.projects(p))?.link ?? "";
+
+  const addStrings = (have: string[], more: string[] | undefined) => {
+    const seen = new Set(have.map(entryKey));
+    for (const s of more ?? []) {
+      const k = entryKey(s);
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      have.push(s.trim());
+    }
+  };
+  addStrings(out.skills, incoming.skills);
+  addStrings(out.certifications, incoming.certifications);
+  addStrings(out.achievements, incoming.achievements);
   for (const [id, a] of Object.entries(incoming.answers ?? {})) if (!out.answers[id]?.trim() && a.trim()) out.answers[id] = a;
   return out;
 }
@@ -286,7 +333,9 @@ function parseProjects(lines: string[], linkPool: string[] = []): ProjectEntry[]
       const head = stripBullet(raw).replace(URL_RE, "").replace(DATE_RANGE, "").replace(/\s+((?:jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\.?\s+)?(19|20)\d{2}\s*$/i, "").trim();
       const dot = head.split(/\s·\s/);
       const techStart = dot.length > 1 ? -1 : head.search(/\s(?=[A-Z][\w.+#]*,\s)/);
-      const name = (dot.length > 1 ? dot[0] : techStart > 0 ? head.slice(0, techStart) : head).replace(/\s*·\s*$/, "").trim();
+      // Link labels printed next to the name ("Code | Live", "Site", "GitHub") aren't part of it
+      const name = (dot.length > 1 ? dot[0] : techStart > 0 ? head.slice(0, techStart) : head).replace(/\s*·\s*$/, "")
+        .replace(/(\s*[|·,]?\s*\b(code|live|site|demo|github|repo|link|website|app|paper)\b)+\s*$/i, "").trim();
       const tech = (dot.length > 1 ? dot.slice(1).join(", ") : techStart > 0 ? head.slice(techStart) : "").trim();
       cur = { ...EMPTY_PROJECT, name, tech, description: "" };
       out.push(cur);
@@ -368,7 +417,8 @@ function parseSkillsSection(lines: string[]): string[] {
  */
 export function profileFromResume(text: string, pdfLinks: string[] = []): CandidateProfile {
   const r = analyzeResume(text);
-  const p: CandidateProfile = { ...EMPTY_PROFILE, answers: {} };
+  // Fresh lists: pushing into EMPTY_PROFILE's shared arrays would leak skills between resumes
+  const p: CandidateProfile = { ...EMPTY_PROFILE, education: [], experience: [], projects: [], skills: [], publications: [], certifications: [], achievements: [], answers: {} };
   const links = classifyLinks(pdfLinks);
 
   const who = nameAndLocation(r.lines);

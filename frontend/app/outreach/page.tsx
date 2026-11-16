@@ -8,6 +8,7 @@ import {
   companyKey,
   CONTACT_STATUSES,
   worksAt,
+  contactsForCompany,
   gmailComposeUrl,
   isEmail,
   mailtoUrl,
@@ -175,9 +176,10 @@ export default function OutreachPage() {
       {drafting && (
         <DraftDialog
           contact={drafting}
+          others={contactsForCompany(drafting.company, contacts ?? []).filter((c) => c.id !== drafting.id)}
           job={job && companyKey(job.company) === companyKey(drafting.company) ? job : null}
           onClose={() => setDrafting(null)}
-          onSent={() => patch(drafting, { outreach: "sent", lastContactedAt: new Date().toISOString(), followUpOn: addDays(7) })}
+          onSent={(sentTo) => { for (const c of sentTo) patch(c, { outreach: "sent", lastContactedAt: new Date().toISOString(), followUpOn: addDays(7) }); }}
         />
       )}
     </div>
@@ -284,8 +286,12 @@ function ImportPanel({ onDone }: { onDone: (n: number) => void }) {
   );
 }
 
-function DraftDialog({ contact, job, onClose, onSent }: { contact: Contact; job: JobContext | null; onClose: () => void; onSent: () => void }) {
+function DraftDialog({ contact, others, job, onClose, onSent }: { contact: Contact; others: Contact[]; job: JobContext | null; onClose: () => void; onSent: (sentTo: Contact[]) => void }) {
   const [useJob, setUseJob] = useState(!!job);
+  // Other inboxes you have at the same company: all included by default, untick any you don't want
+  const [extra, setExtra] = useState<Set<string>>(() => new Set(others.map((c) => c.id)));
+  const recipients = [contact, ...others.filter((c) => extra.has(c.id))];
+  const to = recipients.map((c) => c.email).join(",");
   const [jd, setJd] = useState("");
   const [target, setTarget] = useState("");
   const [busy, setBusy] = useState(false);
@@ -324,6 +330,22 @@ function DraftDialog({ contact, job, onClose, onSent }: { contact: Contact; job:
           <button className="ml-auto text-muted-foreground hover:text-foreground" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </div>
 
+        {others.length > 0 && (
+          <fieldset className="rounded-[3px] border border-border p-3 text-sm">
+            <legend className="px-1 text-xs text-muted-foreground">{contact.company} has {others.length + 1} emails in your list. Send to:</legend>
+            <label className="flex items-center gap-2"><input type="checkbox" checked disabled /> <span className="break-all">{contact.email}</span>{contact.title && <span className="text-xs text-muted-foreground">{contact.title}</span>}</label>
+            {others.map((c) => (
+              <label key={c.id} className="flex items-center gap-2">
+                <input type="checkbox" checked={extra.has(c.id)} onChange={(e) => { const n = new Set(extra); if (e.target.checked) n.add(c.id); else n.delete(c.id); setExtra(n); }} />
+                <span className="break-all">{c.email}</span>
+                {(c.name || c.title) && <span className="text-xs text-muted-foreground">{[c.name, c.title].filter(Boolean).join(", ")}</span>}
+                {c.status === "unverified" && <span className="text-xs text-muted-foreground">· unverified</span>}
+              </label>
+            ))}
+            <p className="mt-1 text-xs text-muted-foreground">One email to all ticked addresses. Most companies share one careers inbox, so two or three is plenty.</p>
+          </fieldset>
+        )}
+
         {!body && (
           <div className="space-y-2">
             {job && (
@@ -353,12 +375,12 @@ function DraftDialog({ contact, job, onClose, onSent }: { contact: Contact; job:
             )}
             <p className="text-xs text-muted-foreground">Read it through, then open it in your mail. <strong>Attach your resume PDF</strong> before you press Send.</p>
             <div className="flex flex-wrap gap-2">
-              <a href={gmailComposeUrl(contact.email, subject, body)} target="_blank" rel="noreferrer"><Button size="sm"><ExternalLink size={14} className="mr-1" /> Open in Gmail</Button></a>
-              <a href={mailtoUrl(contact.email, subject, body)}><Button size="sm" variant="outline"><Mail size={14} className="mr-1" /> Mail app</Button></a>
+              <a href={gmailComposeUrl(to, subject, body)} target="_blank" rel="noreferrer"><Button size="sm"><ExternalLink size={14} className="mr-1" /> Open in Gmail{recipients.length > 1 ? ` (${recipients.length})` : ""}</Button></a>
+              <a href={mailtoUrl(to, subject, body)}><Button size="sm" variant="outline"><Mail size={14} className="mr-1" /> Mail app</Button></a>
               <Button size="sm" variant="outline" onClick={async () => { await navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`); setCopied(true); }}>
                 <Copy size={14} className="mr-1" /> {copied ? "Copied" : "Copy"}
               </Button>
-              <Button size="sm" variant="secondary" disabled={sent} onClick={() => { onSent(); setSent(true); }}>{sent ? "Marked as sent · follow-up in 7 days" : "I sent it"}</Button>
+              <Button size="sm" variant="secondary" disabled={sent} onClick={() => { onSent(recipients); setSent(true); }}>{sent ? "Marked as sent · follow-up in 7 days" : "I sent it"}</Button>
               <Button size="sm" variant="ghost" onClick={() => { setBody(""); setSubject(""); }}>Start over</Button>
             </div>
           </div>
