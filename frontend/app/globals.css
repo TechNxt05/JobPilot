@@ -106,9 +106,9 @@
   --color-ok: var(--ok);
   --color-warn: var(--warn);
 
-  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
-  --font-narrow: var(--font-display), "Arial Narrow", ui-sans-serif, sans-serif;
-  --font-mono: var(--font-figures), ui-monospace, monospace;
+  --font-sans: "Archivo Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-narrow: "Archivo Narrow", "Arial Narrow", ui-sans-serif, sans-serif;
+  --font-mono: "Martian Mono", ui-monospace, monospace;
 }
 
 @layer base {

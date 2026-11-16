@@ -1,11 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Archivo_Narrow, Martian_Mono } from "next/font/google";
+// Fonts are bundled from npm (Fontsource) instead of next/font/google, so builds never depend on Google Fonts' servers
+import "@fontsource-variable/archivo/wght.css";
+import "@fontsource/archivo-narrow/latin-500.css";
+import "@fontsource/archivo-narrow/latin-600.css";
+import "@fontsource/archivo-narrow/latin-700.css";
+import "@fontsource/martian-mono/latin-400.css";
+import "@fontsource/martian-mono/latin-500.css";
 import "./globals.css";
 import { AppShell } from "@/components/AppShell";
-
-const body = Archivo({ subsets: ["latin"], variable: "--font-body", display: "swap" });
-const display = Archivo_Narrow({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-display", display: "swap" });
-const figures = Martian_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-figures", display: "swap" });
 
 export const metadata: Metadata = {
   title: "JobPilot",
@@ -21,7 +23,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${body.variable} ${display.variable} ${figures.variable}`}>
+    <html lang="en">
       <body>
         <AppShell />
         {children}
