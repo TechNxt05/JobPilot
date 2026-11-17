@@ -107,6 +107,22 @@ export const DEFAULT_SOURCES: JobSource[] = [
   { ats: "greenhouse", slug: "patronusaiinc", company: "Patronus AI" },
   { ats: "greenhouse", slug: "stackblitz", company: "bolt.new (StackBlitz)" },
   { ats: "workable", slug: "crewai", company: "CrewAI" },
+  // Healthcare AI (boards checked Nov 2026; Hippocratic AI hosts its own careers page, which isn't readable here.
+  // Note ashby "andromeda" is an unrelated company; Andromeda Surgical is "andromedasurgical")
+  { ats: "greenhouse", slug: "coherehealth", company: "Cohere Health" },
+  { ats: "ashby", slug: "forus", company: "Forus" },
+  { ats: "ashby", slug: "ambiencehealthcare", company: "Ambience Healthcare" },
+  { ats: "ashby", slug: "openevidence", company: "OpenEvidence" },
+  { ats: "ashby", slug: "chartahealth", company: "Charta Health" },
+  { ats: "ashby", slug: "tandem-health", company: "Tandem Health" },
+  { ats: "ashby", slug: "archy", company: "Archy" },
+  { ats: "greenhouse", slug: "suki", company: "Suki" },
+  { ats: "ashby", slug: "commure", company: "Commure" },
+  { ats: "ashby", slug: "vitalize", company: "Vitalize" },
+  { ats: "ashby", slug: "onoshealth", company: "Onos Health" },
+  { ats: "ashby", slug: "andromedasurgical", company: "Andromeda Surgical" },
+  { ats: "ashby", slug: "general-medicine", company: "General Medicine" },
+  { ats: "ashby", slug: "healthleap", company: "Healthleap" },
 ];
 
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
