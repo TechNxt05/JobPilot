@@ -20,6 +20,7 @@ import {
   profileFromResume,
   QUESTION_CATEGORIES,
   scoreATS,
+  skillsMissingFromList,
   type CandidateProfile,
   type StoredResume,
 } from "@internova/core";
@@ -266,6 +267,7 @@ export default function ProfilePage() {
 
       <Section title={`Skills (${profile.skills.length})`}>
         <ListText value={profile.skills} separator="," rows={3} onCommit={(v) => set("skills", v)} placeholder="Python, React, LangGraph…" />
+        <MissingSkills profile={profile} onAdd={(v) => set("skills", [...profile.skills, ...v])} />
       </Section>
 
       <Section title={`Publications (${profile.publications.length})`}>
@@ -403,6 +405,18 @@ function ListEditor<T extends object>({ items, empty, onChange, fields, addLabel
         </details>
       ))}
       <Button variant="outline" size="sm" onClick={() => onChange([...items, { ...empty }])}>+ {addLabel}</Button>
+    </div>
+  );
+}
+
+/** Skills used in projects / experience that aren't in the Skills list yet (e.g. Playwright in a scraper project). */
+function MissingSkills({ profile, onAdd }: { profile: CandidateProfile; onAdd: (skills: string[]) => void }) {
+  const missing = skillsMissingFromList(profile);
+  if (!missing.length) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-muted-foreground">
+      <span>Used in your projects or experience but not listed: <strong className="text-foreground">{missing.join(", ")}</strong></span>
+      <Button size="sm" variant="outline" onClick={() => onAdd(missing)}>Add {missing.length > 1 ? "all" : ""}</Button>
     </div>
   );
 }

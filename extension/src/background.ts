@@ -13,7 +13,7 @@ import {
 } from "@internova/core";
 import { hostedAI, hostedConfigured, hostedQuota } from "./hosted";
 import type { Request } from "./messages";
-import { getProfile, getProviderConfig, getResumes } from "./storage";
+import { getAnswers, getProfile, getProviderConfig, getResumes } from "./storage";
 
 // Clicking the toolbar icon opens the side panel
 chrome.runtime.onInstalled.addListener(() => {
@@ -50,8 +50,11 @@ async function handle(msg: Request) {
     }
     case "draft-answers": {
       const { profile, resumeText } = await profileAndResume();
-      return runAI("draft-answers", { questions: msg.questions, job: msg.job, profile, resumeText },
-        (ai) => draftAnswers(ai, msg.questions, { profile: profileToContext(profile, resumeText), job: msg.job }));
+      // Earlier answers (library + common questions) let the model adapt an answer when a question is reworded
+      const library = (await getAnswers()).map((a) => ({ question: a.question, answer: a.answer }));
+      const answers = [...(msg.answers ?? []), ...library].slice(0, 25);
+      return runAI("draft-answers", { questions: msg.questions, job: msg.job, profile, resumeText, answers },
+        (ai) => draftAnswers(ai, msg.questions, { profile: profileToContext(profile, resumeText), job: msg.job, answers }));
     }
     case "parse-resume": {
       const resume = (await getResumes()).find((r) => r.id === msg.resumeId);

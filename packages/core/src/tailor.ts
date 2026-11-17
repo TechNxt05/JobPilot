@@ -6,7 +6,7 @@ import { escapeLatex, escapeUrl, latexPreamble, latexToText } from "./latex";
 import { profileToContext, type CandidateProfile } from "./profile";
 import { completeParsed, looseArray, looseStrings, looseText, parseJSONLoose, ProviderError, type AIConfig, type CompleteOptions } from "./providers";
 import { analyzeResume } from "./resume";
-import { findSkills } from "./skills";
+import { findSkills, skillCategory, type SkillCategory } from "./skills";
 
 /* ------------------------------ Grounding checks ------------------------------ */
 
@@ -173,6 +173,17 @@ function assemble(p: CandidateProfile, out: z.infer<typeof TailorSchema>, source
   const jobSkills = [...findSkills(jobText).keys()];
   const skillGaps = jobSkills.filter((k) => !sourceSkills.has(k));
 
+  // Job skills the candidate genuinely has (anywhere in the profile: skills, project tech, bullets) must be on the page.
+  // The model sometimes drops them, so add any it left out to the best-fitting skills group.
+  const finalSkills = skills.length ? skills : [{ category: "Skills", items: p.skills.slice(0, 20) }];
+  // Checked against the Skills section only: recruiters and ATS keyword filters look there first, and a tool that
+  // appears only in a project's tech line is easy to miss.
+  const onPage = findSkills(finalSkills.flatMap((g) => g.items).join("\n"));
+  const added = jobSkills.filter((k) => sourceSkills.has(k) && !onPage.has(k));
+  for (const k of added) insertSkill(finalSkills, k);
+  const them = added.length > 1 ? "them" : "it";
+  const notes = added.length ? [...out.notes, `Added ${added.join(", ")} to Skills: the job asks for ${them} and your profile shows ${them}.`] : out.notes;
+
   return {
     resume: {
       name: [p.firstName, p.lastName].filter(Boolean).join(" "),
@@ -187,12 +198,44 @@ function assemble(p: CandidateProfile, out: z.infer<typeof TailorSchema>, source
       })),
       experience,
       projects,
-      skills: skills.length ? skills : [{ category: "Skills", items: p.skills.slice(0, 20) }],
+      skills: finalSkills,
       extras,
     },
-    report: { removed, skillGaps, notes: out.notes },
+    report: { removed, skillGaps, notes },
   };
 }
+
+const CATEGORY_WORDS: [RegExp, SkillCategory[]][] = [
+  [/language/i, ["language"]],
+  [/front|web|\bui\b/i, ["frontend"]],
+  [/back|server|\bapi/i, ["backend"]],
+  [/test|\bqa\b|automation/i, ["testing"]],
+  [/data|database|\bdb/i, ["database", "data"]],
+  [/\b(ml|ai|llm|genai)\b|machine|deep|learning|intelligence/i, ["ml"]],
+  [/cloud|devops|infra|deploy/i, ["cloud", "devops"]],
+];
+
+/** Put a canonical skill in the group that already holds skills of its kind, else a tools-like group, else a new one. */
+function insertSkill(groups: { category: string; items: string[] }[], skill: string) {
+  const cat = skillCategory(skill);
+  const byItems = cat === "other" ? undefined : groups.find((g) => g.items.some((i) => skillCategory(i) === cat));
+  const byName = groups.find((g) => CATEGORY_WORDS.some(([re, cats]) => re.test(g.category) && cats.includes(cat)));
+  const target = byItems ?? byName ?? groups.find((g) => /tool|framework|librar|technolog|platform|other|^skills$/i.test(g.category));
+  if (target) target.items.push(skill);
+  else if (groups.length < 5) groups.push({ category: "Tools", items: [skill] });
+  else groups[groups.length - 1].items.push(skill);
+}
+
+/** Job skills the candidate's profile already shows (they must appear on the tailored resume). */
+export function jobSkillsYouHave(jobText: string, source: string): string[] {
+  const have = findSkills(source);
+  return [...findSkills(jobText).keys()].filter((k) => have.has(k));
+}
+
+const mustInclude = (skills: string[]) =>
+  skills.length
+    ? `\nJOB SKILLS THE CANDIDATE HAS (the profile shows each one). Every one MUST appear in the resume: in Skills and, where true, in the bullet that used it:\n${skills.join(", ")}`
+    : "";
 
 /** Plain text of a structured resume (for scoring and word counts). */
 export function resumeText(r: TailoredResume): string {
@@ -275,6 +318,7 @@ export async function tailorResume(ai: AIConfig, input: TailorInput, opts: Pick<
   const user = [
     `JOB: ${input.job.title ?? ""} at ${input.job.company ?? ""}\n${input.job.text.slice(0, 7000)}`,
     atsNotes(input.atsHints),
+    mustInclude(jobSkillsYouHave(input.job.text, source)),
     `\n${indexedProfile(input.profile)}`,
     `\nCANDIDATE PROFILE\n${profileToContext(input.profile, input.resumeText).slice(0, 12000)}`,
   ].join("\n");
@@ -374,6 +418,7 @@ export async function tailorLatex(
     input.shorten ? "The previous version compiled to MORE THAN ONE PAGE. Shorten it to fit one page.\n" : "",
     `JOB: ${input.job.title ?? ""} at ${input.job.company ?? ""}\n${input.job.text.slice(0, 6000)}`,
     atsNotes(input.atsHints),
+    mustInclude(jobSkillsYouHave(input.job.text, source)),
     `\nCANDIDATE PROFILE\n${profileToContext(input.profile).slice(0, 6000)}`,
     `\nLATEX RESUME\n${input.latex.slice(0, 20000)}`,
   ].join("\n");
@@ -398,6 +443,12 @@ export async function tailorLatex(
   const bullets = newText.split("\n").filter((l) => l.startsWith("•")).map((l) => l.slice(1).trim());
   const jobSkills = [...findSkills(input.job.text).keys()];
   const srcSkills = findSkills(source);
+  const inNew = findSkills(newText);
+  const left = jobSkills.filter((k) => srcSkills.has(k) && !inNew.has(k));
+  if (left.length) {
+    const them = left.length > 1 ? "them" : "it";
+    warnings.push(`The job asks for ${left.join(", ")} and your profile shows ${them}, but the tailored resume doesn't mention ${them}. Add ${them} to your Skills section.`);
+  }
   return {
     latex,
     changes: value.changes,

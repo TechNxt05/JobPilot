@@ -13,16 +13,20 @@ import { extractJobFromPage } from "../extractor";
 import { send } from "../messages";
 import { TrackButton } from "./TrackButton";
 import { ApplyKit } from "./ApplyKit";
+import { looksLikeApplicationForm, scanFields, type PageScan } from "../pageScan";
 
 const ALL_SITES = ["https://*/*", "http://*/*"];
 
 interface Props {
   resumes: StoredResume[];
   keySet: boolean;
-  goTo: (tab: "profile" | "settings") => void;
+  goTo: (tab: "profile" | "settings" | "autofill") => void;
+  /** Hands the job and any application form on the same page to Autofill */
+  onScanned: (scan: PageScan) => void;
 }
 
-export function AnalyzeView({ resumes, keySet, goTo }: Props) {
+export function AnalyzeView({ resumes, keySet, goTo, onScanned }: Props) {
+  const [formFields, setFormFields] = useState(0);
   const [busy, setBusy] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +39,7 @@ export function AnalyzeView({ resumes, keySet, goTo }: Props) {
     setNeedsPermission(false);
     setBusy(true);
     setAnalysis(null);
+    setFormFields(0);
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) throw new Error("No active tab found.");
@@ -52,6 +57,12 @@ export function AnalyzeView({ resumes, keySet, goTo }: Props) {
         setError("Couldn't find a job description on this page. Select the description text, then click Analyze again.");
         return;
       }
+
+      // Same read: is the application form on this page too? (Lever / Ashby / Greenhouse often put both together)
+      const fields = await scanFields().catch(() => []);
+      const hasForm = looksLikeApplicationForm(fields);
+      setFormFields(hasForm ? fields.length : 0);
+      onScanned({ tabId: tab.id, url: tab.url ?? "", job, fields: hasForm ? fields : [], at: Date.now() });
 
       const local = analyzeJobLocal(job, resumes);
       setAnalysis(local);
@@ -106,6 +117,12 @@ export function AnalyzeView({ resumes, keySet, goTo }: Props) {
       {analysis && (
         <>
           <JobHeader analysis={analysis} />
+          {formFields > 0 && (
+            <div className="card subtle">
+              <p className="small">This page also has the application form ({formFields} fields). It's ready in Autofill with this job's description, no second scan needed.</p>
+              <button className="btn small" onClick={() => goTo("autofill")}>Open in Autofill</button>
+            </div>
+          )}
           <TrackButton job={analysis.job} score={selected?.alignment.overall ?? null} resumeName={selected?.resumeName} deadline={analysis.requirements.deadline} />
 
           {!resumes.length ? (

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   BASIC_FIELDS,
+  skillsMissingFromList,
   COMMON_QUESTIONS,
   EMPTY_EDUCATION,
   EMPTY_EXPERIENCE,
@@ -168,6 +169,7 @@ export function ProfileView({ resumes, keySet }: { resumes: StoredResume[]; keyS
       <Section title={`Skills (${profile.skills.length})`}>
         <ListText value={profile.skills} separator="," rows={3} placeholder="Python, React, LangGraph, Docker…" onCommit={(v) => set("skills", v)} />
         <p className="hint">Comma-separated.</p>
+        <MissingSkills profile={profile} onAdd={(v) => set("skills", [...profile.skills, ...v])} />
       </Section>
 
       <Section title={`Publications (${profile.publications.length})`}>
@@ -389,5 +391,17 @@ function AnswerItem({ answer }: { answer: SavedAnswer }) {
         <button className="btn ghost" onClick={() => confirm("Delete this saved answer?") && deleteAnswer(answer.id)}>Delete</button>
       </div>
     </details>
+  );
+}
+
+/** Skills used in projects / experience that aren't in the Skills list yet (e.g. Playwright in a scraper project). */
+function MissingSkills({ profile, onAdd }: { profile: CandidateProfile; onAdd: (skills: string[]) => void }) {
+  const missing = skillsMissingFromList(profile);
+  if (!missing.length) return null;
+  return (
+    <div className="row gap">
+      <p className="hint">Used in your projects or experience but not listed: <strong>{missing.join(", ")}</strong></p>
+      <button className="btn small" onClick={() => onAdd(missing)}>Add {missing.length > 1 ? "all" : ""}</button>
+    </div>
   );
 }

@@ -8,6 +8,7 @@ import { JobsView } from "./JobsView";
 import { cloudConfigured, currentUser, startAutoSync, supabase } from "../cloud";
 import { hostedConfigured } from "../hosted";
 import { SettingsView } from "./SettingsView";
+import type { PageScan } from "../pageScan";
 
 type Tab = "analyze" | "autofill" | "jobs" | "profile" | "settings";
 
@@ -19,6 +20,8 @@ export function App() {
   const [settings, setSettings] = useState<AISettings | null>(null);
   const [keySet, setKeySet] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
+  // Last read of the job tab (Analyze → Autofill hand-off: one scan, one AI draft)
+  const [pageScan, setPageScan] = useState<PageScan | null>(null);
   const firstLoad = useRef(true);
 
   const refresh = useCallback(async () => {
@@ -68,8 +71,8 @@ export function App() {
       </header>
       <main className="content">
         {/* Every tab stays mounted (just hidden) so results survive switching tabs */}
-        <div hidden={tab !== "analyze"}><AnalyzeView resumes={resumes} keySet={aiReady} goTo={setTab} /></div>
-        <div hidden={tab !== "autofill"}><AutofillView resumes={resumes} keySet={aiReady} goTo={setTab} /></div>
+        <div hidden={tab !== "analyze"}><AnalyzeView resumes={resumes} keySet={aiReady} goTo={setTab} onScanned={setPageScan} /></div>
+        <div hidden={tab !== "autofill"}><AutofillView resumes={resumes} keySet={aiReady} goTo={setTab} active={tab === "autofill"} pageScan={pageScan} /></div>
         <div hidden={tab !== "jobs"}><JobsView /></div>
         <div hidden={tab !== "profile"}><ProfileView resumes={resumes} keySet={aiReady} /></div>
         <div hidden={tab !== "settings"}>{settings && <SettingsView settings={settings} keySet={keySet} signedIn={signedIn} />}</div>

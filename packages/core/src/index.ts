@@ -20,3 +20,4 @@ export * from "./jobpost";
 export * from "./pdftext";
 export * from "./notes";
 export * from "./posts";
+export * from "./hrlists";

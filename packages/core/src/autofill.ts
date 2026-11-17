@@ -91,7 +91,7 @@ const LOGISTICS_SENSITIVE: [RegExp, string][] = [
   [/salary|compensation|\bctc\b|pay\s+expectation|expected\s+pay|stipend\s+expect/i, "Compensation"],
   [/notice\s+period|start\s+date|join(ing)?\s+date|\bavailab(le|ility)\b|available\s+to\s+start/i, "Availability"],
   [/relocat/i, "Relocation"],
-  [/how\s+did\s+you\s+(hear|find|learn|come\s+to)|referr(al|ed)|^\s*source\s*$/i, "Referral source"],
+  [/how\s+did\s+you\s+(hear|find|learn|come\s+to)|\breferr(al|ed)\b|^\s*source\s*$/i, "Referral source"],
 ];
 
 const SENSITIVE = [...LOCKED_SENSITIVE, ...LOGISTICS_SENSITIVE];
@@ -235,6 +235,15 @@ export function matchSavedAnswer(question: string, answers: SavedAnswer[], thres
   return bestScore >= threshold ? best : null;
 }
 
+/** Profile fields AI may write from the rest of the profile when they're empty (never contact or identity details). */
+const AI_WRITABLE_KEYS = new Set<FieldKey>(["headline", "summary", "skills", "currentTitle"]);
+
+/** A visible label that reads like a question or field name (not just an id like "q_12" or a search box). */
+function hasMeaningfulLabel(f: FormField): boolean {
+  const l = f.label.trim();
+  return l.length >= 4 && /[a-z]{3}/i.test(l) && !/^(search|filter|captcha|keyword|q|query)\b/i.test(l);
+}
+
 function profileValue(key: FieldKey, p: FlatProfile): string {
   if (key === "fullName") return [p.firstName, p.lastName].filter(Boolean).join(" ");
   return p[key] ?? "";
@@ -297,7 +306,10 @@ export function planAutofill(fields: FormField[], profile: CandidateProfile, lib
       return { ...base, action: "ask", reason: "sensitive", note: `${c.sensitive}: answer this yourself` };
     }
     if (field.type === "radio" || field.type === "checkbox") {
-      return { ...base, key: c.key, action: "ask", reason: "choice", note: "Choice field: pick the option yourself" };
+      // A single-choice question we have no rule for: AI can pick the option the profile supports
+      const draftable = field.type === "radio" && hasMeaningfulLabel(field) && field.options.length > 1;
+      return { ...base, key: c.key, action: "ask", reason: "choice", aiDraftable: draftable,
+        note: draftable ? "Choice question: pick an option, or let AI choose from your profile" : "Choice field: pick the option yourself" };
     }
     if (c.openQuestion) {
       const saved = matchSavedAnswer(field.label, library);
@@ -306,10 +318,26 @@ export function planAutofill(fields: FormField[], profile: CandidateProfile, lib
             note: `Saved answer to “${saved.question.slice(0, 60)}”` }
         : { ...base, action: "ask", reason: "open_question", aiDraftable: true, note: "Open question: write an answer or let AI draft one from your profile" };
     }
-    if (!c.key) return { ...base, action: "ask", reason: "unknown", note: "Not recognised" };
+    if (!c.key) {
+      // Worded differently from every rule ("Years of Python experience", "Tools you use for testing"): a saved answer
+      // to a similar question, else AI answers it from the whole profile. AI returns nothing when the profile can't.
+      if (!hasMeaningfulLabel(field)) return { ...base, action: "ask", reason: "unknown", note: "Not recognised" };
+      const saved = matchSavedAnswer(field.label, library, 0.4);
+      const fitted = saved ? fitToField(field, saved.answer) : null;
+      if (saved && fitted) {
+        return { ...base, action: "fill", reason: null, value: fitted, answerId: saved.id, source: "library", selected: !field.currentValue,
+          note: `Saved answer to “${saved.question.slice(0, 60)}”` };
+      }
+      return { ...base, action: "ask", reason: "unknown", aiDraftable: true, note: "Not a standard field. AI can answer it from your profile" };
+    }
 
     let value = profileValue(c.key, flat);
-    if (!value) return { ...base, key: c.key, action: "ask", reason: "no_value", note: "Not in your profile" };
+    if (!value) {
+      // Descriptive fields can be written from the rest of the profile; contact details never are
+      const draftable = AI_WRITABLE_KEYS.has(c.key);
+      return { ...base, key: c.key, action: "ask", reason: "no_value", aiDraftable: draftable,
+        note: draftable ? "Not in your profile. AI can write it from your experience" : "Not in your profile" };
+    }
 
     if (c.key === "cgpa" && flat.cgpaScale && /(out\s+of|\/)\s*4\b|4\.0/i.test(field.label) && flat.cgpaScale !== "4") {
       return { ...base, key: c.key, action: "ask", reason: "format", note: `Asks for a 4-point GPA; yours is on a ${flat.cgpaScale}-point scale` };

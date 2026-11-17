@@ -103,7 +103,7 @@ export const COMMON_QUESTIONS: CommonQuestion[] = [
   { id: "work_mode", category: "logistics", ai: false, question: "Are you open to on-site / hybrid / remote work?",
     patterns: [/\b(on[\s-]?site|in[\s-]office|hybrid|remote)\b.{0,40}(open|comfortable|willing|prefer|okay|ok)|(open|comfortable|willing|prefer).{0,40}\b(on[\s-]?site|in[\s-]office|hybrid|remote)\b/i] },
   { id: "referral_source", category: "logistics", ai: false, question: "How did you come to learn about the company / this role?",
-    patterns: [/how\s+did\s+you\s+(hear|come\s+to\s+(know|learn)|learn|find|discover)|where\s+did\s+you\s+(hear|find|see)|referred\s+by|referral/i] },
+    patterns: [/how\s+did\s+you\s+(hear|come\s+to\s+(know|learn)|learn|find|discover)|where\s+did\s+you\s+(hear|find|see)|\breferred\s+by|\breferral/i] },
   { id: "expected_stipend", category: "logistics", ai: false, question: "What stipend / compensation do you expect?",
     patterns: [/salary|stipend|compensation|\bctc\b|pay\s+expectation|expected\s+pay/i] },
   { id: "previously_applied", category: "logistics", ai: false, question: "Have you applied to or worked at this company before?",

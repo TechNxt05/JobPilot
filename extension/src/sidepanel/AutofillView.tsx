@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  bestOption,
   EMPTY_PROFILE,
   getCommonQuestion,
   pickResumeForJob,
   planAutofill,
   profileFromResume,
+  type DraftQuestion,
   type FieldPlan,
   type FormField,
   type JobPosting,
@@ -12,12 +14,13 @@ import {
   type ValueSource,
 } from "@internova/core";
 import { extractJobFromPage } from "../extractor";
-import { attachFile, fillFields, scanFormFields, type AttachItem, type FillItem, type FillResult, type ScannedField } from "../formScanner";
+import { attachFile, fillFields, type AttachItem, type FillItem, type FillResult } from "../formScanner";
+import { JOB_CONTEXT_MS, scanFields, type PageScan } from "../pageScan";
 import { getResumePdf, getTailoredPdf, resumeFileName, toB64, type TailoredPdf } from "../resumeFiles";
 import { send } from "../messages";
 import { getAnswers, getProfile, saveAnswer, saveProfile } from "../storage";
 import { TrackButton } from "./TrackButton";
-import { NoAccessError, requestAllSites, runInAllFrames, runInFrame, runInPage } from "../tabs";
+import { NoAccessError, requestAllSites, runInFrame, runInPage } from "../tabs";
 
 interface Row extends FieldPlan {
   /** Remember this answer (profile common question, or answer library) after filling */
@@ -28,7 +31,20 @@ const rowKey = (r: { field: FormField }) => `${r.field.frameId}:${r.field.iid}`;
 
 /** Demographic / consent fields, uploads, unanswerable choices, date pickers: no input is offered. */
 const isLocked = (r: Row) =>
-  (r.reason === "sensitive" && !r.questionId) || r.reason === "file" || r.reason === "format" || (r.reason === "choice" && !r.questionId);
+  (r.reason === "sensitive" && !r.questionId) || r.reason === "file" || r.reason === "format" || (r.reason === "choice" && !r.questionId && !r.aiDraftable);
+
+const isChoice = (f: FormField) => f.tag === "select" || f.type === "radio";
+
+/** What the AI is told about a field: its options, and whether it wants a value or a paragraph. */
+function draftQuestion(r: Row): DraftQuestion {
+  const short = r.field.tag === "input" && (r.reason === "unknown" || r.reason === "no_value" || r.reason === "choice");
+  return {
+    id: rowKey(r),
+    question: r.field.label || r.field.placeholder || r.field.name,
+    ...(isChoice(r.field) ? { options: r.field.options } : {}),
+    kind: r.field.tag === "textarea" ? "long" : short || isChoice(r.field) ? "short" : undefined,
+  };
+}
 
 /** A file field that takes a resume (not a cover letter, transcript or photo). */
 const RESUME_FIELD = /resume|résumé|\bcv\b|curriculum/i;
@@ -54,9 +70,13 @@ interface Props {
   resumes: StoredResume[];
   keySet: boolean;
   goTo: (tab: "profile" | "settings") => void;
+  /** Whether the Autofill tab is showing (AI drafts wait until it is) */
+  active: boolean;
+  /** Job + form fields Analyze already read from the page */
+  pageScan: PageScan | null;
 }
 
-export function AutofillView({ resumes, keySet, goTo }: Props) {
+export function AutofillView({ resumes, keySet, goTo, active, pageScan }: Props) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
@@ -67,71 +87,105 @@ export function AutofillView({ resumes, keySet, goTo }: Props) {
   const [result, setResult] = useState<{ filled: number; failed: { label: string; error: string }[] } | null>(null);
   const [tailored, setTailored] = useState<TailoredPdf | null>(null);
   const [uploads, setUploads] = useState<Record<string, Upload>>({});
+  /** Rows planned from Analyze's read, waiting to be drafted when this tab opens (so AI runs once, only if needed) */
+  const [pendingDraft, setPendingDraft] = useState<{ rows: Row[]; job: JobPosting | null } | null>(null);
+  const handled = useRef<PageScan | null>(null);
 
   async function draftRows(targets: Row[], jobCtx: JobPosting | null) {
     if (!targets.length) return;
     setAiBusy(true);
-    const res = await send<Record<string, string>>({
-      type: "draft-answers",
-      questions: targets.map((r) => ({ id: rowKey(r), question: r.field.label })),
-      job: jobCtx,
-    });
+    // The candidate's own answers to common questions, worded as questions, so a reworded question can reuse them
+    const profile = await getProfile();
+    const own = Object.entries(profile?.answers ?? {})
+      .filter(([, a]) => a.trim())
+      .map(([id, answer]) => ({ question: getCommonQuestion(id)?.question ?? id, answer }));
+    const res = await send<Record<string, string>>({ type: "draft-answers", questions: targets.map(draftQuestion), job: jobCtx, answers: own });
     setAiBusy(false);
     setRows((rs) =>
       rs?.map((r) => {
         if (!targets.some((t) => rowKey(t) === rowKey(r))) return r;
         if (!res.ok) return { ...r, note: `AI draft failed: ${res.error}` };
-        const answer = res.data[rowKey(r)];
-        return answer
-          ? { ...r, value: answer, selected: true, source: "ai" as const, note: "Drafted from your profile. Edit it so it sounds like you" }
-          : { ...r, note: "AI couldn't answer this from your profile. Write it yourself or add details in Additional information" };
+        const raw = res.data[rowKey(r)];
+        if (!raw) return { ...r, note: "AI couldn't answer this from your profile. Write it yourself or add details in Additional information" };
+        const answer = isChoice(r.field) ? bestOption(r.field.options, raw) : raw;
+        if (!answer) return { ...r, note: `AI suggested “${raw.slice(0, 60)}”, which isn't one of the options. Pick one yourself` };
+        return { ...r, value: answer, selected: true, source: "ai" as const,
+          note: isChoice(r.field) ? "Chosen by AI from your profile. Check it" : "Drafted from your profile. Edit it so it sounds like you" };
       }) ?? null,
     );
   }
+
+  /** Plan the fields against the profile; returns null (with an error shown) when there's nothing to plan with. */
+  async function planFields(fields: FormField[], jobCtx: JobPosting | null): Promise<Row[] | null> {
+    let profile = await getProfile();
+    setUsingResumeProfile(!profile);
+    if (!profile) {
+      if (!resumes.length) {
+        setError("Upload a resume in Profile first. Autofill uses your profile details.");
+        return null;
+      }
+      profile = { ...EMPTY_PROFILE, ...profileFromResume(resumes[0].text, resumes[0].links) };
+    }
+    const plan: Row[] = planAutofill(fields, profile, await getAnswers()).map((p) => ({ ...p, remember: true }));
+    setRows(plan);
+    setJob(jobCtx);
+
+    // Resume upload fields: preselect a fresh tailored PDF, else the saved resume that best matches this job
+    const t = await getTailoredPdf().catch(() => null);
+    setTailored(t);
+    const fileRows = plan.filter((r) => r.reason === "file");
+    const best = pickResumeForJob(resumes, jobCtx ? { title: jobCtx.title ?? "", text: jobCtx.text } : null);
+    const freshTailored = !!t && Date.now() - t.at < TAILORED_FRESH_MS;
+    const next: Record<string, Upload> = {};
+    for (const r of fileRows) {
+      const forResume = isResumeField(r.field) || (fileRows.length === 1 && !OTHER_FILE.test(`${r.field.label} ${r.field.name}`));
+      next[rowKey(r)] = { choice: forResume ? (freshTailored ? "tailored" : best?.id ?? "") : "", selected: forResume && (freshTailored || !!best) };
+    }
+    setUploads(next);
+    return plan;
+  }
+
+  const toDraft = (plan: Row[]) => plan.filter((r) => r.aiDraftable && !r.value);
+
+  // Analyze found the form on the job page: plan it from that read (no second scan) and draft when this tab opens
+  useEffect(() => {
+    if (!pageScan || pageScan === handled.current || !pageScan.fields.length) return;
+    handled.current = pageScan;
+    setError(null);
+    setResult(null);
+    planFields(pageScan.fields, pageScan.job).then((plan) => setPendingDraft(plan ? { rows: plan, job: pageScan.job } : null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageScan]);
+
+  useEffect(() => {
+    if (!active || !pendingDraft) return;
+    setPendingDraft(null);
+    if (keySet) draftRows(toDraft(pendingDraft.rows), pendingDraft.job);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, pendingDraft]);
 
   async function scan() {
     setError(null);
     setResult(null);
     setNeedsPermission(false);
     setBusy(true);
+    setPendingDraft(null);
     try {
-      const frames = await runInAllFrames<ScannedField[]>(scanFormFields);
-      const fields: FormField[] = frames.flatMap((f) => f.result.map((r) => ({ ...r, frameId: f.frameId })));
+      const fields = await scanFields();
       if (!fields.length) {
         setRows(null);
         setError("No form fields found on this page. Open the application form (usually after clicking Apply), then scan again.");
         return;
       }
-      let profile = await getProfile();
-      setUsingResumeProfile(!profile);
-      if (!profile) {
-        if (!resumes.length) {
-          setError("Upload a resume in Profile first. Autofill uses your profile details.");
-          return;
-        }
-        profile = { ...EMPTY_PROFILE, ...profileFromResume(resumes[0].text, resumes[0].links) };
-      }
-      const plan: Row[] = planAutofill(fields, profile, await getAnswers()).map((p) => ({ ...p, remember: true }));
-      setRows(plan);
-
-      // Job context for motivation answers (best effort; application pages often lack the description)
-      const jobCtx = await runInPage<JobPosting>(extractJobFromPage).then((j) => (j && j.text.length > 200 ? j : null)).catch(() => null);
-      setJob(jobCtx);
-
-      // Resume upload fields: preselect a fresh tailored PDF, else the saved resume that best matches this job
-      const t = await getTailoredPdf().catch(() => null);
-      setTailored(t);
-      const fileRows = plan.filter((r) => r.reason === "file");
-      const best = pickResumeForJob(resumes, jobCtx ? { title: jobCtx.title ?? "", text: jobCtx.text } : null);
-      const freshTailored = !!t && Date.now() - t.at < TAILORED_FRESH_MS;
-      const next: Record<string, Upload> = {};
-      for (const r of fileRows) {
-        const forResume = isResumeField(r.field) || (fileRows.length === 1 && !OTHER_FILE.test(`${r.field.label} ${r.field.name}`));
-        next[rowKey(r)] = { choice: forResume ? (freshTailored ? "tailored" : best?.id ?? "") : "", selected: forResume && (freshTailored || !!best) };
-      }
-      setUploads(next);
+      // Job context for motivation answers. Application pages often lack the description: then use the job
+      // Analyze read recently (you usually click Apply on the page you just analyzed).
+      const here = await runInPage<JobPosting>(extractJobFromPage).then((j) => (j && j.text.length > 200 ? j : null)).catch(() => null);
+      const recent = pageScan?.job && Date.now() - pageScan.at < JOB_CONTEXT_MS ? pageScan.job : null;
+      const jobCtx = here ?? recent;
+      const plan = await planFields(fields, jobCtx);
+      if (!plan) return;
       // Questions the profile doesn't answer: one batched AI draft, reviewed before filling
-      if (keySet) await draftRows(plan.filter((r) => r.aiDraftable && !r.value), jobCtx);
+      if (keySet) await draftRows(toDraft(plan), jobCtx);
     } catch (e) {
       if (e instanceof NoAccessError) setNeedsPermission(true);
       else setError((e as Error).message);
@@ -207,10 +261,10 @@ export function AutofillView({ resumes, keySet, goTo }: Props) {
   }
 
   const ready = rows?.filter((r) => r.action === "fill" && r.reason === null && r.source !== "ai" && r.source !== "library" && !r.questionId) ?? [];
-  const questions = rows?.filter((r) => !ready.includes(r) && (r.questionId || r.reason === "open_question" || r.source === "library" || r.source === "ai") && !isLocked(r)) ?? [];
+  const questions = rows?.filter((r) => !ready.includes(r) && (r.questionId || r.reason === "open_question" || r.source === "library" || r.source === "ai" || r.aiDraftable) && !isLocked(r)) ?? [];
   const fileRows = rows?.filter((r) => r.reason === "file") ?? [];
   const needsYou = rows?.filter((r) => !ready.includes(r) && !questions.includes(r) && r.reason !== "unknown" && r.reason !== "file") ?? [];
-  const unknown = rows?.filter((r) => r.reason === "unknown") ?? [];
+  const unknown = rows?.filter((r) => r.reason === "unknown" && !questions.includes(r)) ?? [];
 
   return (
     <div className="stack">
@@ -408,7 +462,7 @@ function QuestionRow({ row, keySet, aiBusy, onChange, onDraft, goTo }: {
         <span className="field-label">{row.field.label || "(unlabelled question)"}</span>
         <SourceChip row={row} />
       </label>
-      <ValueInput row={row} onChange={onChange} multiline={row.field.tag === "textarea" || !logistics} />
+      <ValueInput row={row} onChange={onChange} multiline={row.field.tag === "textarea" || (!logistics && draftQuestion(row).kind !== "short")} />
       {row.note && <p className="muted small">{row.note}</p>}
       <div className="row gap">
         {row.aiDraftable && (keySet ? (

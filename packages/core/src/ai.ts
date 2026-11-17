@@ -164,18 +164,60 @@ Rules:
 - Never answer eligibility, legal, visa, salary, availability, relocation or demographic questions; return "" for those.
 - First person, specific, plain language, no clichés or flattery. Respect any word or character limit in the question;
   otherwise keep each answer under 150 words. Yes/no questions start with "Yes" or "No" when the profile makes it clear.
+- Questions are often worded differently from the usual ones ("Walk us through…", "Years of hands-on Python",
+  "Tools you'd reach for to test a web app"). Work out what is really being asked and answer from the whole profile:
+  projects, their tech, experience bullets, education, additional information and the candidate's earlier answers.
+- When the question is close to one of the CANDIDATE'S EARLIER ANSWERS, reuse that answer, adapted to the new wording.
+- OPTIONS given: answer with exactly one option text, copied verbatim, that the profile supports; "" if it doesn't say.
+- SHORT field: a short value only (a number, a few words or a comma-separated list), no sentences.
+- Counting questions ("years of experience with X"): count from the dates in the profile; if they don't say, return "".
 
 Return JSON only: { "answers": [ { "id": string, "answer": string } ] } with one entry per question id.`;
 
 export interface DraftQuestion {
   id: string;
   question: string;
+  /** Choices for a select / radio question: the answer must be one of them */
+  options?: string[];
+  /** "short" for one-line inputs (a value, not a paragraph) */
+  kind?: "short" | "long";
 }
 
 export interface DraftContext {
   /** profileToContext(profile, resumeText) */
   profile: string;
   job?: Pick<JobPosting, "title" | "company" | "text"> | null;
+  /** The candidate's earlier answers (answer library), reused for similar questions */
+  answers?: { question: string; answer: string }[];
+}
+
+const questionLine = (q: DraftQuestion) => {
+  const opts = q.options?.filter((o) => o.trim() && !/^(select|choose|please|--)/i.test(o.trim())).slice(0, 40);
+  return `- id "${q.id}"${q.kind === "short" ? " (SHORT field)" : ""}: ${q.question}${opts?.length ? `\n  OPTIONS: ${opts.map((o) => JSON.stringify(o)).join(" | ")}` : ""}`;
+};
+
+const strArr = (v: unknown, n: number, max: number) =>
+  (Array.isArray(v) ? v : []).filter((x): x is string => typeof x === "string").slice(0, n).map((x) => x.slice(0, max));
+
+/** Validate draft questions sent by a client (hosted AI). */
+export function cleanDraftQuestions(raw: unknown): DraftQuestion[] {
+  return (Array.isArray(raw) ? raw : [])
+    .filter((q): q is Record<string, unknown> => !!q && typeof q === "object" && typeof q.id === "string" && typeof q.question === "string")
+    .slice(0, 40)
+    .map((q) => ({
+      id: String(q.id).slice(0, 100),
+      question: String(q.question).slice(0, 1000),
+      ...(Array.isArray(q.options) ? { options: strArr(q.options, 60, 200) } : {}),
+      ...(q.kind === "short" || q.kind === "long" ? { kind: q.kind } : {}),
+    }));
+}
+
+/** Validate earlier answers sent by a client (hosted AI). */
+export function cleanDraftAnswers(raw: unknown): { question: string; answer: string }[] {
+  return (Array.isArray(raw) ? raw : [])
+    .filter((a): a is Record<string, unknown> => !!a && typeof a === "object" && typeof a.question === "string" && typeof a.answer === "string")
+    .slice(0, 25)
+    .map((a) => ({ question: String(a.question).slice(0, 300), answer: String(a.answer).slice(0, 1500) }));
 }
 
 /** Draft answers for several open questions in one call. Returns id → answer (empty answers omitted). */
@@ -188,9 +230,12 @@ export async function draftAnswers(
   if (!questions.length) return {};
   const user = [
     `QUESTIONS`,
-    ...questions.map((q) => `- id "${q.id}": ${q.question}`),
+    ...questions.map(questionLine),
     ctx.job ? `\nJOB: ${ctx.job.title ?? ""} at ${ctx.job.company ?? ""}\n${ctx.job.text.slice(0, 5000)}` : `\n(No specific job: write answers that work for internship applications in general.)`,
     `\nCANDIDATE PROFILE\n${ctx.profile.slice(0, 14000)}`,
+    ctx.answers?.length
+      ? `\nCANDIDATE'S EARLIER ANSWERS\n${ctx.answers.slice(0, 25).map((a) => `Q: ${a.question.slice(0, 200)}\nA: ${a.answer.slice(0, 600)}`).join("\n")}`
+      : "",
   ].join("\n");
   const { value: answers } = await completeParsed(ai, { system: DRAFT_PROMPT, user, ...opts }, (raw) => {
     const parsed = z.object({ answers: looseArray(z.object({ id: looseText(), answer: looseText() })) }).safeParse(parseJSONLoose(raw));

@@ -496,6 +496,20 @@ export function profileToContext(p: CandidateProfile, resumeText = ""): string {
   return lines.join("\n");
 }
 
+/**
+ * Skills the candidate shows in their projects and experience (tech lists and bullets) but hasn't put in
+ * their Skills list, e.g. Playwright used in a scraping project. Canonical taxonomy names, first-seen order.
+ */
+export function skillsMissingFromList(p: CandidateProfile): string[] {
+  const listed = findSkills(p.skills.join("\n"));
+  const listedLower = new Set(p.skills.map((s) => s.trim().toLowerCase()));
+  const work = [
+    ...p.projects.flatMap((x) => [x.tech.split(/[,;|/]/).join("\n"), x.description]),
+    ...p.experience.map((e) => e.description),
+  ].join("\n");
+  return [...findSkills(work).keys()].filter((k) => !listed.has(k) && !listedLower.has(k.toLowerCase()));
+}
+
 /** Programming languages from the profile's skills (taxonomy category "language"). */
 export function profileLanguages(p: CandidateProfile): string[] {
   return p.skills.filter((s) => skillCategory(s) === "language" || s === "SQL");

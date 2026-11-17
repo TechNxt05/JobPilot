@@ -1,5 +1,7 @@
 import {
   analyzeJob,
+  cleanDraftAnswers,
+  cleanDraftQuestions,
   draftAnswers,
   generateCoverLetter,
   normalizeProfile,
@@ -8,7 +10,6 @@ import {
   tailorLatex,
   tailorResume,
   type CoverLetterTone,
-  type DraftQuestion,
   type JobPosting,
   type StoredResume,
 } from "@internova/core";
@@ -23,7 +24,7 @@ export const maxDuration = 120;
  *
  * POST { task: "quota" }                       → { remaining, limit }   (free, no quota used)
  * POST { task: "analyze", job, resumes }        → JobAnalysis
- * POST { task: "draft-answers", questions, job?, profile, resumeText }
+ * POST { task: "draft-answers", questions, job?, profile, resumeText, answers? }
  * POST { task: "parse-resume", text }
  * POST { task: "cover-letter", job, profile, resumeText, tone?, words? }
  * POST { task: "tailor-resume", job, profile, resumeText, latex?, shorten? }
@@ -63,10 +64,9 @@ export async function POST(req: Request) {
         return json(await analyzeJob(job, resumes, ai), 200, headers);
       }
       case "draft-answers": {
-        const questions = ((Array.isArray(body.questions) ? body.questions : []) as DraftQuestion[])
-          .filter((q) => q && typeof q.id === "string" && typeof q.question === "string").slice(0, 40);
+        const questions = cleanDraftQuestions(body.questions);
         const ctxJob = job.text.length >= 80 ? job : null;
-        return json(await draftAnswers(ai, questions, { profile: profileToContext(profile, resumeText), job: ctxJob }), 200, headers);
+        return json(await draftAnswers(ai, questions, { profile: profileToContext(profile, resumeText), job: ctxJob, answers: cleanDraftAnswers(body.answers) }), 200, headers);
       }
       case "parse-resume": {
         const text = str(body.text, 20000);

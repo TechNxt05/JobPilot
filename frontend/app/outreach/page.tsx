@@ -14,6 +14,7 @@ import {
   mailtoUrl,
   OUTREACH_STATUSES,
   parseContactsCsv,
+  STARTER_LISTS,
   type Contact,
   type ImportResult,
 } from "@internova/core";
@@ -241,6 +242,13 @@ function ImportPanel({ onDone }: { onDone: (n: number) => void }) {
     if (!source) setSource(f.name.replace(/\.[^.]+$/, ""));
   }
 
+  async function starter(contacts: ImportResult["contacts"]) {
+    setBusy(true); setErr(null);
+    try { onDone(await importContacts(contacts, setProgress)); }
+    catch (e) { setErr((e as Error).message); }
+    finally { setBusy(false); }
+  }
+
   async function run() {
     if (!preview?.contacts.length) return;
     setBusy(true); setErr(null);
@@ -257,6 +265,16 @@ function ImportPanel({ onDone }: { onDone: (n: number) => void }) {
           Upload a CSV, or copy rows from Excel / Google Sheets and paste them here. A header row like <code>Company, Name, Email, Designation, Country</code> is
           recognised; without one, each line just needs an email (the company comes from another column or the email domain). Existing emails are updated, not duplicated.
         </p>
+      </div>
+      <div className="space-y-1.5">
+        <p className="text-sm font-medium">Starter lists</p>
+        {STARTER_LISTS.map((l) => (
+          <div key={l.id} className="flex flex-col md:flex-row md:items-center gap-2 text-sm">
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => starter(l.contacts)}><Plus size={14} className="mr-1" /> {l.name}</Button>
+            <span className="text-xs text-muted-foreground">{l.note}</span>
+          </div>
+        ))}
+        <p className="text-xs text-muted-foreground">Imported as unverified. Already-saved emails keep your status and notes.</p>
       </div>
       <input type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" onChange={file} className="text-sm" />
       <textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={"Company,Name,Email,Designation,Country\nRazorpay,Asha Rao,asha@razorpay.com,Talent Partner,India"}

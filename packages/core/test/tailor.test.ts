@@ -135,7 +135,10 @@ describe("tailorResume (no LaTeX given)", () => {
     expect(resume.experience).toHaveLength(1); // source_index 9 doesn't exist
     expect(resume.experience[0]).toMatchObject({ title: "Software Engineering Intern", company: "Flipkart", dates: "May 2024 – Jul 2024" });
     expect(resume.experience[0].bullets).toEqual(["Reduced API latency by 35% by adding Redis caching to a Node.js service"]);
-    expect(resume.skills[0].items).toEqual(["Python", "TypeScript"]);
+    // Kubernetes removed (not in the profile); job skills the profile shows (Java) are added back
+    expect(resume.skills[0].items.slice(0, 2)).toEqual(["Python", "TypeScript"]);
+    expect(resume.skills.flatMap((g) => g.items)).not.toContain("Kubernetes");
+    expect(resume.skills[0].items).toContain("Java");
     expect(report.removed.map((r) => r.reason).join(" ")).toMatch(/300%.*Kubernetes|Kubernetes.*300%/s);
     expect(report.skillGaps).toEqual(expect.arrayContaining(["Kubernetes", "AWS"]));
     expect(report.atsAfter).toBeGreaterThan(0);
