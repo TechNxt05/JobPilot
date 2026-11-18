@@ -101,7 +101,7 @@ Hard rules (violations are automatically removed):
 
 Return JSON only:
 {
-  "headline": string,
+  "headline": string,   // the job's title + 3-5 of the candidate's matching skills, e.g. "AI Engineer · Python, RAG, FastAPI"
   "summary": string,
   "experience": [{ "source_index": number (index in PROFILE EXPERIENCE), "bullets": string[] }],
   "projects":   [{ "source_index": number (index in PROFILE PROJECTS), "bullets": string[] }],
@@ -126,6 +126,7 @@ function assemble(
   jobText: string,
   approved: string[] = [],
   workText = source,
+  jobTitle = "",
 ): { resume: TailoredResume; report: Pick<TailorReport, "removed" | "skillGaps" | "notes" | "addedSkills" | "droppedSkills"> } {
   const removed: TailorReport["removed"] = [];
   // Approved skills the candidate's experience/projects don't show: fine in Skills, never claimed in a bullet
@@ -200,10 +201,16 @@ function assemble(
   const { groups: fittedSkills, dropped } = fitSkillRows(finalSkills, must);
   const notes = [...out.notes];
 
+  // Title line under the name: the job's own title (recruiters search the ATS by title) + job skills the work shows
+  const shown = jobSkills.filter((k) => workSkills.has(k));
+  const lineSkills = [...shown, ...jobSkills.filter((k) => must.has(k) && !shown.includes(k))];
+  const aiHeadline = out.headline && !ungroundedSkills(out.headline, source).length && !ungroundedNumbers(out.headline, source).length ? out.headline : "";
+  const headline = titleLine(jobTitle, lineSkills) || aiHeadline || p.headline;
+
   return {
     resume: {
       name: [p.firstName, p.lastName].filter(Boolean).join(" "),
-      headline: out.headline && !ungroundedSkills(out.headline, source).length ? out.headline : p.headline,
+      headline,
       contact: { email: p.email, phone: p.phone, location: [p.city, p.country].filter(Boolean).join(", "), linkedin: p.linkedin, github: p.github, portfolio: p.portfolio },
       summary,
       education: p.education.map((e) => ({
@@ -240,6 +247,33 @@ function insertSkill(groups: { category: string; items: string[] }[], skill: str
   if (target) target.items.push(skill);
   else if (groups.length < MAX_SKILL_ROWS) groups.push({ category: "Tools", items: [skill] });
   else groups[groups.length - 1].items.push(skill);
+}
+
+/**
+ * The job title as a resume headline: "Senior AI Engineer - Remote (m/f/d) #4521" → "Senior AI Engineer".
+ * Location, work mode, requisition ids and gender tags are listing noise, not part of the title.
+ */
+export function cleanJobTitle(title: string): string {
+  return title
+    .replace(/\((?:m|f|w|d|x|all genders?)(?:\s*\/\s*(?:m|f|w|d|x))*\)/gi, "")
+    .replace(/\s+[-–—|:]\s+.*$/, "")
+    .replace(/\s*\((?:remote|hybrid|on-?site|contract|full[- ]time|part[- ]time)[^)]*\)/gi, "")
+    .replace(/\s*(?:#|req\.?\s*(?:id)?\s*:?\s*|job\s*id\s*:?\s*)[A-Z0-9-]{3,}\b.*$/i, "")
+    .replace(/[,;]\s*(?:remote|hybrid|on-?site)\b.*$/i, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/** "AI Engineer · Python, RAG, FastAPI, Docker": one line, at most `max` characters. */
+export function titleLine(jobTitle: string, skills: string[], max = 95): string {
+  const title = cleanJobTitle(jobTitle);
+  if (!title || title.length > 60) return "";
+  const picked: string[] = [];
+  for (const s of skills) {
+    if (picked.length >= 5) break;
+    if (`${title} · ${[...picked, s].join(", ")}`.length <= max) picked.push(s);
+  }
+  return picked.length ? `${title} · ${picked.join(", ")}` : title;
 }
 
 export const MAX_SKILL_ROWS = 6;
@@ -439,7 +473,7 @@ export async function tailorResume(ai: AIConfig, input: TailorInput, opts: Pick<
     ...input.profile.experience.map((e) => e.description),
     ...input.profile.projects.flatMap((x) => [x.tech, x.description]),
   ].join("\n");
-  const { resume, report } = assemble(input.profile, value, source, input.job.text, approved, workText);
+  const { resume, report } = assemble(input.profile, value, source, input.job.text, approved, workText, input.job.title ?? "");
   const fitted = fitToWords(resume);
   const bullets = [...fitted.experience.flatMap((e) => e.bullets), ...fitted.projects.flatMap((x) => x.bullets)];
   return { resume: fitted, report: buildReport(input.resumeText || source, resumeText(fitted), input.job, report, bullets) };
@@ -552,7 +586,7 @@ export function renderResumeLatex(r: TailoredResume): string {
 %--- HEADER ---
 \\begin{tabular*}{\\textwidth}{l@{\\extracolsep{\\fill}}r}
   {\\Large\\bfseries ${e(r.name)}} & ${e(r.contact.location)} \\\\[2pt]
-  \\small
+${r.headline ? `  {\\normalsize ${e(r.headline).replace(/\s*·\s*/g, " $\\,\\cdot\\,$ ")}} & \\\\[1pt]\n` : ""}  \\small
   ${contact} &
 \\end{tabular*}
 

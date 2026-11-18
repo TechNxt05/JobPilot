@@ -8,6 +8,8 @@ import {
   escapeLatex,
   fitToWords,
   fitSkillRows,
+  cleanJobTitle,
+  titleLine,
   missingJobSkills,
   addSkillsToProfile,
   generateCoverLetter,
@@ -301,6 +303,17 @@ describe("approved skills (skill picker)", () => {
     expect(tex).toContain("\\usepackage{sourcesanspro}");
     expect(tex).toContain("\\section{Technical Skills}");
     expect(tex).toContain("Kubernetes");
+  });
+
+  it("puts the job title and matching skills on one line under the name", () => {
+    expect(cleanJobTitle("Senior AI Engineer - Remote (m/f/d)")).toBe("Senior AI Engineer");
+    expect(cleanJobTitle("ML Engineer (Hybrid) #REQ-4521")).toBe("ML Engineer");
+    expect(cleanJobTitle("Software Engineer, Backend")).toBe("Software Engineer, Backend");
+    const line = titleLine("AI Engineer", ["Python", "RAG", "FastAPI", "Docker", "LangChain", "PostgreSQL", "Kubernetes"]);
+    expect(line).toBe("AI Engineer · Python, RAG, FastAPI, Docker, LangChain");
+    expect(titleLine("", ["Python"])).toBe("");
+    const r = { name: "A B", headline: line, contact: { email: "", phone: "", location: "", linkedin: "", github: "", portfolio: "" }, summary: "", education: [], experience: [], projects: [], skills: [], extras: [] };
+    expect(renderResumeLatex(r)).toContain("AI Engineer $\\,\\cdot\\,$ Python, RAG");
   });
 
   it("never drops skills the job needs", () => {
