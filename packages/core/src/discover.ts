@@ -107,6 +107,16 @@ export const DEFAULT_SOURCES: JobSource[] = [
   { ats: "greenhouse", slug: "patronusaiinc", company: "Patronus AI" },
   { ats: "greenhouse", slug: "stackblitz", company: "bolt.new (StackBlitz)" },
   { ats: "workable", slug: "crewai", company: "CrewAI" },
+  // Frontier-lab suppliers (boards checked Nov 2026; Dreamteam has no readable board. Note greenhouse "david" is an
+  // unrelated company; David AI is ashby "david-ai")
+  { ats: "ashby", slug: "afterquery", company: "AfterQuery" },
+  { ats: "lever", slug: "humble-robotics", company: "Humble Robotics" },
+  { ats: "ashby", slug: "david-ai", company: "David AI" },
+  { ats: "ashby", slug: "mirendil", company: "Mirendil" },
+  { ats: "ashby", slug: "noeri", company: "Noeri" },
+  { ats: "ashby", slug: "fragmentai", company: "Fragment" },
+  { ats: "ashby", slug: "coframe", company: "Coframe" },
+  { ats: "greenhouse", slug: "graphonai", company: "Graphon Labs" },
   // Healthcare AI (boards checked Nov 2026; Hippocratic AI hosts its own careers page, which isn't readable here.
   // Note ashby "andromeda" is an unrelated company; Andromeda Surgical is "andromedasurgical")
   { ats: "greenhouse", slug: "coherehealth", company: "Cohere Health" },
@@ -123,6 +133,42 @@ export const DEFAULT_SOURCES: JobSource[] = [
   { ats: "ashby", slug: "andromedasurgical", company: "Andromeda Surgical" },
   { ats: "ashby", slug: "general-medicine", company: "General Medicine" },
   { ats: "ashby", slug: "healthleap", company: "Healthleap" },
+  // Remote-first companies (boards checked Nov 2026). Not readable here (Workday, Rippling, own pages or empty boards):
+  // Symetra, Cengage, Hims & Hers, Deel, Remote, VAST Data, Sorcero, McGraw Hill, Intrado, Docusign, Workiva,
+  // MissionWired, Toggl, Atlassian, Shopify, Arkency, Automattic, MailerLite, Akamai, SafetyWing, BairesDev, Xapo, Deltek.
+  // Note greenhouse "vast" is Vast (space) and greenhouse "remote" is General Assembly, not VAST Data / Remote.com.
+  { ats: "ashby", slug: "zapier", company: "Zapier" },
+  { ats: "ashby", slug: "docker", company: "Docker" },
+  { ats: "greenhouse", slug: "upstart", company: "Upstart" },
+  { ats: "greenhouse", slug: "usergems", company: "UserGems" },
+  { ats: "greenhouse", slug: "abnormalsecurity", company: "Abnormal AI" },
+  { ats: "greenhouse", slug: "affirm", company: "Affirm" },
+  { ats: "greenhouse", slug: "customerio", company: "Customer.io" },
+  { ats: "ashby", slug: "kit", company: "Kit" },
+  { ats: "lever", slug: "verygoodsecurity", company: "Very Good Security" },
+  { ats: "greenhouse", slug: "grafanalabs", company: "Grafana Labs" },
+  { ats: "greenhouse", slug: "upwork", company: "Upwork" },
+  { ats: "ashby", slug: "posthog", company: "PostHog" },
+  { ats: "ashby", slug: "ashby", company: "Ashby" },
+  { ats: "ashby", slug: "gitbook", company: "GitBook" },
+  { ats: "ashby", slug: "helpscout", company: "Help Scout" },
+  { ats: "ashby", slug: "close", company: "Close" },
+  { ats: "greenhouse", slug: "brave", company: "Brave" },
+  { ats: "lever", slug: "toptal", company: "Toptal" },
+  { ats: "ashby", slug: "1password", company: "1Password" },
+  { ats: "greenhouse", slug: "canonical", company: "Canonical" },
+  { ats: "greenhouse", slug: "digitalocean98", company: "DigitalOcean" },
+  { ats: "greenhouse", slug: "bitwarden", company: "Bitwarden" },
+  { ats: "ashby", slug: "appcues", company: "Appcues" },
+  { ats: "ashby", slug: "buffer", company: "Buffer" },
+  { ats: "ashby", slug: "constructor", company: "Constructor" },
+  { ats: "workable", slug: "trailofbits", company: "Trail of Bits" },
+  { ats: "workable", slug: "awesomemotive", company: "Awesome Motive" },
+  { ats: "ashby", slug: "duck-duck-go", company: "DuckDuckGo" },
+  { ats: "ashby", slug: "revenuecat", company: "RevenueCat" },
+  { ats: "greenhouse", slug: "cloudbeds", company: "Cloudbeds" },
+  { ats: "ashby", slug: "clickhouse", company: "ClickHouse" },
+  { ats: "ashby", slug: "circle", company: "Circle (circle.so)" },
 ];
 
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
