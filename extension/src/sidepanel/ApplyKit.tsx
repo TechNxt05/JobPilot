@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  addSkillsToProfile,
   compileLatex,
+  findSkills,
+  missingJobSkills,
   compileOnePage,
   coverLetterText,
   LatexError,
@@ -18,7 +21,7 @@ import {
   type TailorReport,
 } from "@internova/core";
 import { send } from "../messages";
-import { getProfile } from "../storage";
+import { getProfile, getResumes, saveProfile } from "../storage";
 import { resumeFileName, setTailoredPdf } from "../resumeFiles";
 
 type TailorResult =
@@ -91,6 +94,46 @@ export function ApplyKit({ job, resumeId, keySet, goTo }: { job: JobPosting; res
   const [tailorBusy, setTailorBusy] = useState("");
   const [tailorErr, setTailorErr] = useState<string | null>(null);
 
+  // ---- skills the job wants that the chosen resume doesn't show ----
+  const [missing, setMissing] = useState<{ skill: string; inProfile: boolean }[]>([]);
+  const [jobSkillCount, setJobSkillCount] = useState(0);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [savedToProfile, setSavedToProfile] = useState<string[]>([]);
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const [profile, resumes] = await Promise.all([getProfile(), getResumes()]);
+      const resume = resumes.find((r) => r.id === resumeId) ?? resumes[resumes.length - 1];
+      const list = missingJobSkills(job.text, resume?.text ?? "", profile);
+      if (!live) return;
+      setMissing(list);
+      setJobSkillCount(findSkills(job.text).size);
+      setPicked(new Set(list.map((m) => m.skill))); // all ticked: untick what you don't want
+      setSavedToProfile([]);
+    })().catch(() => {});
+    return () => { live = false; };
+  }, [job.text, resumeId]);
+
+  const toggle = (skill: string) =>
+    setPicked((cur) => {
+      const next = new Set(cur);
+      if (next.has(skill)) next.delete(skill);
+      else next.add(skill);
+      return next;
+    });
+
+  /** Ticked skills go into the profile too, so every future tailored resume and autofill knows them. */
+  async function syncPickedToProfile(skills: string[]) {
+    const p = await getProfile();
+    if (!p || !skills.length) return;
+    const next = addSkillsToProfile(p, skills);
+    if (next === p) return;
+    await saveProfile(next);
+    setSavedToProfile(next.skills.slice(p.skills.length));
+    setMissing((cur) => cur.map((m) => (skills.includes(m.skill) ? { ...m, inProfile: true } : m)));
+  }
+
   /** The latest tailored PDF is offered in Autofill for this job's resume upload field. */
   async function keepForAutofill(bytes: Uint8Array) {
     const p = await getProfile();
@@ -101,7 +144,9 @@ export function ApplyKit({ job, resumeId, keySet, goTo }: { job: JobPosting; res
     setTailorErr(null);
     setPdf(null);
     setTailorBusy("Tailoring with AI…");
-    const res = await send<TailorResult>({ type: "tailor-resume", job: jobInfo, resumeId, latex: latexIn.trim() || undefined });
+    const addSkills = missing.map((m) => m.skill).filter((s) => picked.has(s));
+    await syncPickedToProfile(addSkills).catch(() => {});
+    const res = await send<TailorResult>({ type: "tailor-resume", job: jobInfo, resumeId, latex: latexIn.trim() || undefined, addSkills });
     if (!res.ok) { setTailorBusy(""); return setTailorErr(res.error); }
     let result = res.data;
     try {
@@ -117,7 +162,7 @@ export function ApplyKit({ job, resumeId, keySet, goTo }: { job: JobPosting; res
         let pages = await pdfPageCount(compiled.pdf);
         if (pages > 1) {
           setTailorBusy("Over one page: shortening…");
-          const again = await send<TailorResult>({ type: "tailor-resume", job: jobInfo, resumeId, latex: result.latex, shorten: true });
+          const again = await send<TailorResult>({ type: "tailor-resume", job: jobInfo, resumeId, latex: result.latex, shorten: true, addSkills });
           if (again.ok && again.data.mode === "latex") {
             const c2 = await compileLatex(again.data.latex);
             const p2 = await pdfPageCount(c2.pdf);
@@ -185,6 +230,41 @@ export function ApplyKit({ job, resumeId, keySet, goTo }: { job: JobPosting; res
           <summary>Overleaf / LaTeX code (optional)</summary>
           <textarea rows={8} value={latexIn} onChange={(e) => setLatexIn(e.target.value)} spellCheck={false} placeholder="Paste main.tex" className="mono" />
         </details>
+        {jobSkillCount > 0 && (
+          <div className="skill-pick">
+            {missing.length === 0 ? (
+              <p className="small good-text">Your resume already shows all {jobSkillCount} skills this job asks for.</p>
+            ) : (
+              <>
+                <p className="small">
+                  <strong>Missing from your resume:</strong> {missing.length} of the {jobSkillCount} skills this job asks for.
+                </p>
+                <p className="hint">Ticked skills go into the tailored resume's Skills section (less relevant skills make room, so it stays one page) and are saved to your Profile for future roles. Untick any you don't want.</p>
+                {[
+                  { label: "In your profile", list: missing.filter((m) => m.inProfile) },
+                  { label: "New to your profile: keep only the ones you really have", list: missing.filter((m) => !m.inProfile) },
+                ].filter((g) => g.list.length).map((g) => (
+                  <div key={g.label} className="field">
+                    <span className="muted small">{g.label}</span>
+                    <div className="chips">
+                      {g.list.map((m) => (
+                        <label key={m.skill} className={`chip pick ${picked.has(m.skill) ? "on" : ""} ${m.inProfile ? "" : "new"}`}>
+                          <input type="checkbox" checked={picked.has(m.skill)} onChange={() => toggle(m.skill)} />
+                          {m.skill}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <div className="row gap">
+                  <button className="btn small ghost" onClick={() => setPicked(new Set(missing.map((m) => m.skill)))}>Tick all</button>
+                  <button className="btn small ghost" onClick={() => setPicked(new Set())}>Untick all</button>
+                  <span className="muted small">{picked.size} will be added</span>
+                </div>
+              </>
+            )}
+          </div>
+        )}
         <button className="btn primary" onClick={runTailor} disabled={!!tailorBusy}>{tailorBusy || (tailor ? "Tailor again" : "Tailor my resume")}</button>
         {tailorErr && <pre className="error-text small pre">{tailorErr}</pre>}
         {report && (
@@ -199,7 +279,15 @@ export function ApplyKit({ job, resumeId, keySet, goTo }: { job: JobPosting; res
               <details><summary>{report.removed.length} invented detail{report.removed.length > 1 ? "s" : ""} removed</summary>
                 <ul className="plain small">{report.removed.map((r, i) => <li key={i}>“{r.text}”: {r.reason}</li>)}</ul></details>
             )}
-            {report.skillGaps.length > 0 && <p className="small"><span className="muted">Skill gaps (not added):</span> {report.skillGaps.join(", ")}</p>}
+            {(report.addedSkills ?? []).length > 0 && (
+              <div className="field">
+                <span className="muted small">Added to Skills</span>
+                <div className="chips">{report.addedSkills.map((s) => <span key={s} className="chip ok">{s}</span>)}</div>
+              </div>
+            )}
+            {(report.droppedSkills ?? []).length > 0 && <p className="small muted">Removed to keep it one page (this job doesn't ask for them): {report.droppedSkills.join(", ")}</p>}
+            {savedToProfile.length > 0 && <p className="small good-text">Saved to your Profile: {savedToProfile.join(", ")}</p>}
+            {report.skillGaps.length > 0 && <p className="small"><span className="muted">Not added (unticked):</span> {report.skillGaps.join(", ")}</p>}
             {report.repeatedVerbs.length > 0 && <p className="small muted">Repeated verbs: {report.repeatedVerbs.map((v) => `${v.verb} ×${v.count}`).join(", ")}</p>}
             <div className="row gap">
               {pdf && <button className="btn small primary" onClick={() => download(pdf.url, `Resume_${slug}.pdf`)}>Download PDF</button>}

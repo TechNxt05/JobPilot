@@ -232,3 +232,12 @@ form.row input { flex: 1; min-width: 0; }
 details.card > summary { cursor: pointer; }
 details.card[open] > summary { margin-bottom: 4px; }
 [hidden] { display: none !important; }
+
+/* ---- Tailored resume: skill picker ---- */
+.good-text { color: var(--good); }
+.skill-pick { display: flex; flex-direction: column; gap: 8px; padding: 10px 0 4px; border-top: 1px solid var(--border); margin-top: 6px; }
+.chip.pick { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; text-decoration: line-through; opacity: 0.75; }
+.chip.pick input { width: auto; margin: 0; accent-color: var(--primary); }
+.chip.pick.on { text-decoration: none; opacity: 1; background: var(--good-bg); border-color: transparent; color: var(--good); }
+.chip.pick.on.new { background: var(--mid-bg); color: var(--mid); }
+.chip.pick:focus-within { outline: 2px solid var(--primary); outline-offset: 1px; }

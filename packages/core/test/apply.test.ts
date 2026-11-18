@@ -40,7 +40,7 @@ describe("tailored resume keeps job skills the candidate has", () => {
     }, { fetchImpl: fetchImpl as unknown as typeof fetch });
     const items = resume.skills.flatMap((g) => g.items);
     expect(items).toContain("Playwright");
-    expect(report.notes.join(" ")).toMatch(/Added Playwright/);
+    expect(report.addedSkills).toContain("Playwright");
   });
 });
 

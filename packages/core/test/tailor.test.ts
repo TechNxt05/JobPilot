@@ -7,6 +7,9 @@ import {
   coverLetterText,
   escapeLatex,
   fitToWords,
+  fitSkillRows,
+  missingJobSkills,
+  addSkillsToProfile,
   generateCoverLetter,
   latexToText,
   ONE_PAGE_WORDS,
@@ -263,5 +266,52 @@ describe("provider timeouts and placeholders", () => {
 
   it("ignores placeholder keys from .env templates", () => {
     expect(toConfigs([{ provider: "openai", apiKey: "your_openai_api_key" }, { provider: "groq", apiKey: "gsk_realLookingKey" }]).map((c) => c.provider)).toEqual(["groq"]);
+  });
+});
+
+describe("approved skills (skill picker)", () => {
+  it("lists job skills missing from the resume, profile ones first", () => {
+    const p = { ...profile, skills: [...profile.skills, "Docker"] };
+    const missing = missingJobSkills("Need Python, Docker and Kubernetes.", "Python developer", p);
+    expect(missing).toEqual([{ skill: "Docker", inProfile: true }, { skill: "Kubernetes", inProfile: false }]);
+  });
+
+  it("adds approved skills to Skills, keeps them out of bullets, and drops less relevant skills to fit a row", async () => {
+    const longRow = ["Python", "TypeScript", "Ruby", "PHP", "Scala", "MATLAB", "Dart", "Kotlin", "Swift", "Solidity", "Verilog", "Bash", "Rust", "C#", "Haskell", "Elixir"];
+    const p = { ...profile, skills: [...profile.skills, ...longRow] };
+    const fetchImpl = vi.fn(async () =>
+      chat({
+        headline: "", summary: "A summary",
+        experience: [{ source_index: 0, bullets: ["Reduced API latency by 35% by adding Redis caching to a Node.js service", "Ran the service on Kubernetes"] }],
+        projects: [], skills: [{ category: "Languages", items: longRow }], extras: [], notes: [],
+      }),
+    );
+    const { resume, report } = await tailorResume({ provider: "groq", apiKey: "gsk_x" },
+      { profile: p, resumeText: RESUME, job: { ...job, text: `${JD}\nKubernetes and Go required.` }, addSkills: ["Kubernetes", "Go"] },
+      { fetchImpl: fetchImpl as unknown as typeof fetch });
+    const items = resume.skills.flatMap((g) => g.items);
+    expect(items).toEqual(expect.arrayContaining(["Kubernetes", "Go"]));
+    expect(resume.experience[0].bullets.join(" ")).not.toContain("Kubernetes"); // approved for Skills, not a claimed achievement
+    expect(report.addedSkills).toEqual(expect.arrayContaining(["Kubernetes", "Go"]));
+    expect(report.skillGaps).not.toContain("Kubernetes");
+    expect(report.droppedSkills.length).toBeGreaterThan(0);
+    for (const g of resume.skills) expect(`${g.category}: ${g.items.join(", ")}`.length).toBeLessThanOrEqual(118);
+    expect(resume.summary).toBe("");
+    const tex = renderResumeLatex(resume);
+    expect(tex).toContain("\\usepackage{sourcesanspro}");
+    expect(tex).toContain("\\section{Technical Skills}");
+    expect(tex).toContain("Kubernetes");
+  });
+
+  it("never drops skills the job needs", () => {
+    const { groups, dropped } = fitSkillRows([{ category: "Tools", items: ["Docker", "Jira", "Postman", "Kubernetes"] }], new Set(["Docker", "Kubernetes"]), 30);
+    expect(groups[0].items).toEqual(["Docker", "Kubernetes"]);
+    expect(dropped).toEqual(["Postman", "Jira"]);
+  });
+
+  it("adds skills to the profile without duplicates", () => {
+    const p = { ...profile, skills: ["React.js", "Python"] };
+    expect(addSkillsToProfile(p, ["React", "Kubernetes", "kubernetes"]).skills).toEqual(["React.js", "Python", "Kubernetes"]);
+    expect(addSkillsToProfile(p, ["python"])).toBe(p);
   });
 });

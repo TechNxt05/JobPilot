@@ -6,7 +6,7 @@ import { escapeLatex, escapeUrl, latexPreamble, latexToText } from "./latex";
 import { profileToContext, type CandidateProfile } from "./profile";
 import { completeParsed, looseArray, looseStrings, looseText, parseJSONLoose, ProviderError, type AIConfig, type CompleteOptions } from "./providers";
 import { analyzeResume } from "./resume";
-import { findSkills, skillCategory, type SkillCategory } from "./skills";
+import { canonicalSkill, findSkills, skillCategory, type SkillCategory } from "./skills";
 
 /* ------------------------------ Grounding checks ------------------------------ */
 
@@ -59,8 +59,12 @@ export interface TailoredResume {
 export interface TailorReport {
   /** Bullets or items removed because they contained facts not in the profile */
   removed: { text: string; reason: string }[];
-  /** Job skills the candidate doesn't show; never added to the resume */
+  /** Job skills the candidate doesn't show and didn't approve; not added to the resume */
   skillGaps: string[];
+  /** Skills put into the Skills section for this job (approved by the candidate or already in the profile) */
+  addedSkills: string[];
+  /** Less relevant skills taken out of the Skills section to keep each row on one line */
+  droppedSkills: string[];
   repeatedVerbs: { verb: string; count: number }[];
   atsBefore: number;
   atsAfter: number;
@@ -87,9 +91,10 @@ const TAILOR_PROMPT = `You tailor a candidate's resume to one job, as an expert 
 Hard rules (violations are automatically removed):
 - Use ONLY facts in the CANDIDATE PROFILE. Never invent employers, titles, dates, tools, skills, metrics or results.
 - Numbers: only use numbers that already appear in the profile. If a bullet has no metric, describe scope/impact in words.
-- Skills: list only skills present in the profile. Prefer the job's wording when the candidate genuinely has the skill
-  (e.g. profile "ReactJS" and job "React" → "React").
-- One page: at most 4 bullets per role, 3 per project, 3 projects, each bullet under 25 words; summary under 45 words.
+- Skills: list only skills present in the profile or in SKILLS TO ADD. Prefer the job's wording when the candidate
+  genuinely has the skill (e.g. profile "ReactJS" and job "React" → "React"). Group them into at most 6 rows
+  (e.g. Languages, AI / ML, Backend & Cloud, Frontend, Developer Tools), most job-relevant first in each row.
+- One page: at most 3 bullets per role, 2 per project, 4 projects, each bullet 20-32 words. Leave "summary" empty.
 - Order bullets and projects by relevance to the job. Drop irrelevant items rather than padding.
 - Start every bullet with a strong, specific past-tense verb; don't reuse the same verb more than twice.
 - No first person, no buzzword stuffing, no exaggeration ("revolutionized", "world-class").
@@ -114,12 +119,22 @@ function indexedProfile(p: CandidateProfile): string {
 const dates = (a: string, b: string) => [a, b].filter(Boolean).join(" – ");
 
 /** Build the structured resume from AI output, taking every factual field from the profile itself. */
-function assemble(p: CandidateProfile, out: z.infer<typeof TailorSchema>, source: string, jobText: string): { resume: TailoredResume; report: Pick<TailorReport, "removed" | "skillGaps" | "notes"> } {
+function assemble(
+  p: CandidateProfile,
+  out: z.infer<typeof TailorSchema>,
+  source: string,
+  jobText: string,
+  approved: string[] = [],
+  workText = source,
+): { resume: TailoredResume; report: Pick<TailorReport, "removed" | "skillGaps" | "notes" | "addedSkills" | "droppedSkills"> } {
   const removed: TailorReport["removed"] = [];
+  // Approved skills the candidate's experience/projects don't show: fine in Skills, never claimed in a bullet
+  const workSkills = findSkills(workText);
+  const listOnly = new Set(approved.map(canonicalSkill).filter((k) => !workSkills.has(k) && !workText.toLowerCase().includes(k.toLowerCase())));
   const keepBullet = (b: string) => {
     const nums = ungroundedNumbers(b, source);
     if (nums.length) { removed.push({ text: b, reason: `uses ${nums.join(", ")}, which isn't in your profile` }); return false; }
-    const skills = ungroundedSkills(b, source);
+    const skills = [...ungroundedSkills(b, source), ...[...findSkills(b).keys()].filter((k) => listOnly.has(k))];
     if (skills.length) { removed.push({ text: b, reason: `claims ${skills.join(", ")}, which isn't in your profile` }); return false; }
     return b.trim().length > 0;
   };
@@ -130,22 +145,22 @@ function assemble(p: CandidateProfile, out: z.infer<typeof TailorSchema>, source
     .slice(0, 4)
     .map((e) => {
       const src = p.experience[e.source_index];
-      let bullets = e.bullets.map(clip).filter(keepBullet).slice(0, 4);
+      let bullets = e.bullets.map(clip).filter(keepBullet).slice(0, 3);
       if (!bullets.length) bullets = src.description.split("\n").map(clip).filter(Boolean).slice(0, 3); // fall back to the original
       return { title: src.title, company: src.company, location: src.location, dates: dates(src.start, src.end), bullets };
     });
   const projects = out.projects
     .filter((x) => p.projects[x.source_index])
-    .slice(0, 3)
+    .slice(0, 4)
     .map((x) => {
       const src = p.projects[x.source_index];
-      let bullets = x.bullets.map(clip).filter(keepBullet).slice(0, 3);
+      let bullets = x.bullets.map(clip).filter(keepBullet).slice(0, 2);
       if (!bullets.length) bullets = src.description.split("\n").map(clip).filter(Boolean).slice(0, 2);
       return { name: src.name, link: src.link, tech: src.tech, bullets };
     });
 
-  const sourceLower = source.toLowerCase();
-  const sourceSkills = findSkills(source);
+  const sourceLower = `${source}\n${approved.join("\n")}`.toLowerCase();
+  const sourceSkills = findSkills(`${source}\n${approved.join("\n")}`);
   const skills = out.skills
     .map((g) => ({
       category: g.category || "Skills",
@@ -158,17 +173,14 @@ function assemble(p: CandidateProfile, out: z.infer<typeof TailorSchema>, source
       }),
     }))
     .filter((g) => g.items.length)
-    .slice(0, 5);
+    .slice(0, MAX_SKILL_ROWS);
 
   const extras = out.extras
     .map((x) => ({ heading: x.heading || "Achievements", items: x.items.map(clip).filter(keepBullet).slice(0, 4) }))
     .filter((x) => x.items.length);
 
-  let summary = out.summary;
-  if (summary && (ungroundedNumbers(summary, source).length || ungroundedSkills(summary, source).length)) {
-    removed.push({ text: summary, reason: "summary contained facts not in your profile" });
-    summary = p.summary;
-  }
+  // The resume template has no summary section; the space goes to projects and skills
+  const summary = "";
 
   const jobSkills = [...findSkills(jobText).keys()];
   const skillGaps = jobSkills.filter((k) => !sourceSkills.has(k));
@@ -179,10 +191,14 @@ function assemble(p: CandidateProfile, out: z.infer<typeof TailorSchema>, source
   // Checked against the Skills section only: recruiters and ATS keyword filters look there first, and a tool that
   // appears only in a project's tech line is easy to miss.
   const onPage = findSkills(finalSkills.flatMap((g) => g.items).join("\n"));
+  const onPageLower = new Set(finalSkills.flatMap((g) => g.items.map((i) => i.toLowerCase())));
   const added = jobSkills.filter((k) => sourceSkills.has(k) && !onPage.has(k));
+  // Approved skills outside the taxonomy ("Computer Networks") are added as written
+  for (const a of approved.map(canonicalSkill)) if (!added.includes(a) && !onPage.has(a) && !onPageLower.has(a.toLowerCase())) added.push(a);
   for (const k of added) insertSkill(finalSkills, k);
-  const them = added.length > 1 ? "them" : "it";
-  const notes = added.length ? [...out.notes, `Added ${added.join(", ")} to Skills: the job asks for ${them} and your profile shows ${them}.`] : out.notes;
+  const must = new Set([...jobSkills.filter((k) => sourceSkills.has(k)), ...approved.map(canonicalSkill)]);
+  const { groups: fittedSkills, dropped } = fitSkillRows(finalSkills, must);
+  const notes = [...out.notes];
 
   return {
     resume: {
@@ -198,10 +214,10 @@ function assemble(p: CandidateProfile, out: z.infer<typeof TailorSchema>, source
       })),
       experience,
       projects,
-      skills: finalSkills,
+      skills: fittedSkills,
       extras,
     },
-    report: { removed, skillGaps, notes },
+    report: { removed, skillGaps, notes, addedSkills: added, droppedSkills: dropped },
   };
 }
 
@@ -222,8 +238,46 @@ function insertSkill(groups: { category: string; items: string[] }[], skill: str
   const byName = groups.find((g) => CATEGORY_WORDS.some(([re, cats]) => re.test(g.category) && cats.includes(cat)));
   const target = byItems ?? byName ?? groups.find((g) => /tool|framework|librar|technolog|platform|other|^skills$/i.test(g.category));
   if (target) target.items.push(skill);
-  else if (groups.length < 5) groups.push({ category: "Tools", items: [skill] });
+  else if (groups.length < MAX_SKILL_ROWS) groups.push({ category: "Tools", items: [skill] });
   else groups[groups.length - 1].items.push(skill);
+}
+
+export const MAX_SKILL_ROWS = 6;
+/** Characters that fit on one skills row of the resume template ("Category: a, b, c") */
+export const SKILL_ROW_CHARS = 118;
+
+const rowLength = (g: { category: string; items: string[] }) => g.category.length + 2 + g.items.join(", ").length;
+
+/**
+ * Keep every skills row on one line. When a row is too long (usually because job skills were just added), the
+ * skills in it that this job doesn't ask for are dropped, last first. Skills in `keep` are never dropped.
+ */
+export function fitSkillRows(
+  groups: { category: string; items: string[] }[],
+  keep: Set<string>,
+  maxChars = SKILL_ROW_CHARS,
+): { groups: { category: string; items: string[] }[]; dropped: string[] } {
+  const dropped: string[] = [];
+  const kept = (item: string) => keep.has(item) || keep.has(canonicalSkill(item)) || [...findSkills(item).keys()].some((k) => keep.has(k));
+  const out = groups.map((g) => {
+    // Dedupe ("React" and "React.js" in one row)
+    const seen = new Set<string>();
+    const items = g.items.filter((i) => {
+      const k = canonicalSkill(i).toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    // Job-relevant skills first, so ATS and recruiters see them
+    const row = { category: g.category, items: [...items.filter(kept), ...items.filter((i) => !kept(i))] };
+    while (rowLength(row) > maxChars) {
+      const i = row.items.map((x, j) => [x, j] as const).reverse().find(([x]) => !kept(x))?.[1];
+      if (i === undefined) break;
+      dropped.push(...row.items.splice(i, 1));
+    }
+    return row;
+  });
+  return { groups: out.filter((g) => g.items.length), dropped };
 }
 
 /** Job skills the candidate's profile already shows (they must appear on the tailored resume). */
@@ -236,6 +290,37 @@ const mustInclude = (skills: string[]) =>
   skills.length
     ? `\nJOB SKILLS THE CANDIDATE HAS (the profile shows each one). Every one MUST appear in the resume: in Skills and, where true, in the bullet that used it:\n${skills.join(", ")}`
     : "";
+
+const toAdd = (skills: string[] = []) =>
+  skills.length
+    ? `\nSKILLS TO ADD (the candidate confirmed they have these). Put every one in the Skills section, in the row it fits; if a row gets too long, drop the skills in it this job doesn't need. Mention one in a bullet only when that experience or project text already shows it:\n${skills.join(", ")}`
+    : "";
+
+/**
+ * Skills the job asks for that a resume doesn't show. `inProfile` = the candidate's profile (skills list, projects,
+ * experience) already has it, so it's safe to add; otherwise only the candidate can say whether they have it.
+ */
+export function missingJobSkills(jobText: string, resumeText: string, profile?: CandidateProfile | null): { skill: string; inProfile: boolean }[] {
+  const onResume = findSkills(resumeText);
+  const resumeLower = resumeText.toLowerCase();
+  const prof = profile ? findSkills(profileToContext(profile)) : new Map();
+  const listed = new Set((profile?.skills ?? []).map((x) => canonicalSkill(x).toLowerCase()));
+  return [...findSkills(jobText).keys()]
+    .filter((k) => !onResume.has(k) && !resumeLower.includes(k.toLowerCase()))
+    .map((skill) => ({ skill, inProfile: prof.has(skill) || listed.has(skill.toLowerCase()) }))
+    .sort((a, b) => Number(b.inProfile) - Number(a.inProfile));
+}
+
+/** Add skills to a profile's Skills list (canonical names, no duplicates). Returns the same object when nothing changes. */
+export function addSkillsToProfile(p: CandidateProfile, skills: string[]): CandidateProfile {
+  const have = new Set(p.skills.map((x) => canonicalSkill(x).toLowerCase()));
+  const fresh: string[] = [];
+  for (const raw of skills) {
+    const k = canonicalSkill(raw);
+    if (k && !have.has(k.toLowerCase())) { have.add(k.toLowerCase()); fresh.push(k); }
+  }
+  return fresh.length ? { ...p, skills: [...p.skills, ...fresh] } : p;
+}
 
 /** Plain text of a structured resume (for scoring and word counts). */
 export function resumeText(r: TailoredResume): string {
@@ -251,17 +336,24 @@ export function resumeText(r: TailoredResume): string {
 }
 
 const wordCount = (t: string) => t.split(/\s+/).filter(Boolean).length;
-/** ~ what fits one A4 page in the template at 10pt */
-export const ONE_PAGE_WORDS = 560;
+/** ~ what fits one A4 page in the resume template (the reference resume fills it at ~640 words) */
+export const ONE_PAGE_WORDS = 620;
 
 /** Remove the least important content until the resume fits the word budget. Returns null when nothing more can go. */
 export function shrinkResume(r: TailoredResume): TailoredResume | null {
   const c: TailoredResume = JSON.parse(JSON.stringify(r));
   const longest = <T extends { bullets: string[] }>(xs: T[], min: number) =>
     xs.map((x, i) => [i, x.bullets.length] as const).filter(([, n]) => n > min).sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0];
-  if (c.extras.some((x) => x.items.length > 2)) { const x = c.extras.find((e) => e.items.length > 2)!; x.items.pop(); return c; }
-  if (c.projects.length > 2) { c.projects.pop(); return c; }
+  if (c.extras.some((x) => x.items.length > 3)) { const x = c.extras.find((e) => e.items.length > 3)!; x.items.pop(); return c; }
+  if (c.projects.length > 4) { c.projects.pop(); return c; }
   let i = longest(c.projects, 2);
+  if (i !== undefined) { c.projects[i].bullets.pop(); return c; }
+  if (c.projects.length > 3) { c.projects.pop(); return c; }
+  if (c.extras.some((x) => x.items.length > 2)) { const x = c.extras.find((e) => e.items.length > 2)!; x.items.pop(); return c; }
+  i = longest(c.experience, 3);
+  if (i !== undefined) { c.experience[i].bullets.pop(); return c; }
+  if (c.projects.length > 2) { c.projects.pop(); return c; }
+  i = longest(c.projects, 2);
   if (i !== undefined) { c.projects[i].bullets.pop(); return c; }
   i = longest(c.experience, 3);
   if (i !== undefined) { c.experience[i].bullets.pop(); return c; }
@@ -285,11 +377,19 @@ export function fitToWords(r: TailoredResume, budget = ONE_PAGE_WORDS): Tailored
   return cur;
 }
 
-export function buildReport(beforeText: string, afterText: string, job: Pick<JobPosting, "text">, extra: Pick<TailorReport, "removed" | "skillGaps" | "notes">, bullets: string[]): TailorReport {
+export function buildReport(
+  beforeText: string,
+  afterText: string,
+  job: Pick<JobPosting, "text">,
+  extra: Pick<TailorReport, "removed" | "skillGaps" | "notes"> & Partial<Pick<TailorReport, "addedSkills" | "droppedSkills">>,
+  bullets: string[],
+): TailorReport {
   const req = extractRequirementsHeuristic({ title: null, company: null, location: null, url: null, text: job.text, source: "user" });
   const before = analyzeResume(beforeText);
   const after = analyzeResume(afterText);
   return {
+    addedSkills: [],
+    droppedSkills: [],
     ...extra,
     repeatedVerbs: repetitionReport(bullets),
     atsBefore: scoreATS(before).score,
@@ -307,7 +407,11 @@ export interface TailorInput {
   job: Pick<JobPosting, "title" | "company" | "text">;
   /** ATS-specific instructions (see atsTailorHints) */
   atsHints?: string[];
+  /** Skills the candidate approved for this resume (see missingJobSkills); added to the Skills section */
+  addSkills?: string[];
 }
+
+const cleanSkills = (xs?: string[]) => [...new Set((xs ?? []).map((x) => String(x).trim()).filter((x) => x && x.length <= 60))].slice(0, 40);
 
 const atsNotes = (hints?: string[]) =>
   hints?.length ? `\nATS NOTES (follow these within the hard rules; never add facts)\n${hints.map((h) => `- ${h}`).join("\n")}` : "";
@@ -315,10 +419,12 @@ const atsNotes = (hints?: string[]) =>
 /** Profile → job-tailored structured resume (no LaTeX given). */
 export async function tailorResume(ai: AIConfig, input: TailorInput, opts: Pick<CompleteOptions, "fetchImpl" | "signal"> = {}): Promise<{ resume: TailoredResume; report: TailorReport }> {
   const source = `${profileToContext(input.profile)}\n${input.resumeText}`;
+  const approved = cleanSkills(input.addSkills);
   const user = [
     `JOB: ${input.job.title ?? ""} at ${input.job.company ?? ""}\n${input.job.text.slice(0, 7000)}`,
     atsNotes(input.atsHints),
     mustInclude(jobSkillsYouHave(input.job.text, source)),
+    toAdd(approved),
     `\n${indexedProfile(input.profile)}`,
     `\nCANDIDATE PROFILE\n${profileToContext(input.profile, input.resumeText).slice(0, 12000)}`,
   ].join("\n");
@@ -327,7 +433,13 @@ export async function tailorResume(ai: AIConfig, input: TailorInput, opts: Pick<
     if (!parsed.success) throw new ProviderError("The model's answer didn't match the expected format", null, "invalid_output");
     return parsed.data;
   });
-  const { resume, report } = assemble(input.profile, value, source, input.job.text);
+  // What the candidate's work shows (not the bare Skills list): approved skills outside it stay out of bullets
+  const workText = [
+    input.resumeText,
+    ...input.profile.experience.map((e) => e.description),
+    ...input.profile.projects.flatMap((x) => [x.tech, x.description]),
+  ].join("\n");
+  const { resume, report } = assemble(input.profile, value, source, input.job.text, approved, workText);
   const fitted = fitToWords(resume);
   const bullets = [...fitted.experience.flatMap((e) => e.bullets), ...fitted.projects.flatMap((x) => x.bullets)];
   return { resume: fitted, report: buildReport(input.resumeText || source, resumeText(fitted), input.job, report, bullets) };
@@ -335,47 +447,116 @@ export async function tailorResume(ai: AIConfig, input: TailorInput, opts: Pick<
 
 /* ------------------------------ LaTeX rendering ------------------------------ */
 
-/** Single-column, ATS-friendly LaTeX resume (text-selectable, Unicode-mapped, no tables or graphics). */
+/**
+ * The resume template: Source Sans, one column, text links (icon fonts turn into junk in ATS parsers),
+ * company/date rows as tables, skills as unbulleted rows. Fits one A4 page at about 640 words.
+ */
+const RESUME_PREAMBLE = String.raw`\documentclass[a4paper,10.5pt]{article}
+\usepackage{geometry}
+\geometry{top=0.42in, bottom=0.42in, left=0.48in, right=0.48in}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+\hypersetup{breaklinks=true}
+\usepackage[T1]{fontenc}
+\usepackage{sourcesanspro}
+\usepackage{microtype}
+\usepackage{tabularx}
+\usepackage{color}
+\usepackage{fancyhdr}
+
+% ATS: real space characters and Unicode mappings in the PDF (pdfLaTeX; ignored by other engines)
+\ifdefined\pdfgentounicode \input{glyphtounicode}\pdfgentounicode=1 \fi
+\ifdefined\pdfinterwordspaceon \pdfinterwordspaceon \fi
+
+\renewcommand{\familydefault}{\sfdefault}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\baselinestretch}{0.97}
+\setlength{\tabcolsep}{0pt}
+\raggedbottom
+\raggedright
+
+\setlist[itemize]{topsep=2pt, partopsep=0pt, parsep=0pt, itemsep=2pt, leftmargin=12pt}
+
+\titleformat{\section}{\scshape\normalsize\bfseries}{}{0em}{}[\titlerule]
+\titlespacing*{\section}{0pt}{5pt}{3pt}
+
+\newcommand{\expentry}[2]{
+  \begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+    \textbf{#1} & \small\textit{#2}
+  \end{tabular*}
+}
+
+\newcommand{\projentry}[3]{
+  \begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+    \textbf{#1} \hspace{2pt} \textit{\small #2} & \small\textit{#3}
+  \end{tabular*}
+}
+
+\newcommand{\eduentry}[3]{
+  \begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+    \textbf{#1} & \small\textit{#2} \\[-1pt]
+    \small\textit{#3} &
+  \end{tabular*}
+}
+`;
+
+/** One-page, ATS-friendly LaTeX resume in the JobPilot template (text-selectable, Unicode-mapped, no graphics). */
 export function renderResumeLatex(r: TailoredResume): string {
   const e = escapeLatex;
-  const link = (url: string, label?: string) => (url ? `\\href{${escapeUrl(url)}}{${e(label ?? url.replace(/^https?:\/\/(www\.)?/, ""))}}` : "");
-  const contact = [e(r.contact.phone), r.contact.email ? link(`mailto:${r.contact.email}`, r.contact.email) : "", e(r.contact.location),
-    link(r.contact.linkedin), link(r.contact.github), link(r.contact.portfolio)].filter(Boolean).join(" $|$ ");
-  const items = (xs: string[]) => (xs.length ? `\\begin{itemize}\n${xs.map((b) => `  \\item ${e(b)}`).join("\n")}\n\\end{itemize}` : "");
+  const href = (url: string, label: string) => `\\href{${escapeUrl(url)}}{${e(label)}}`;
+  const items = (xs: string[]) => (xs.length ? `\\vspace{-8pt}\n\\begin{itemize}\n${xs.map((b) => `  \\item ${e(b)}`).join("\n")}\n\\end{itemize}\n` : "");
+  const contact = [
+    r.contact.email ? href(`mailto:${r.contact.email}`, r.contact.email) : "",
+    r.contact.linkedin ? href(r.contact.linkedin, "LinkedIn") : "",
+    r.contact.github ? href(r.contact.github, "GitHub") : "",
+    r.contact.portfolio ? href(r.contact.portfolio, "Portfolio") : "",
+    e(r.contact.phone),
+  ].filter(Boolean).join(" $\\,|\\,$\n  ");
+
   const sec: string[] = [];
   if (r.summary) sec.push(`\\section{Summary}\n${e(r.summary)}`);
-  if (r.education.length) {
-    sec.push(`\\section{Education}\n${r.education.map((x) => `\\textbf{${e(x.school)}} \\hfill ${e(x.dates)}\\\\\n${e(x.degree)}${x.details ? ` \\hfill ${e(x.details)}` : ""}`).join("\n\n\\smallskip\n")}`);
-  }
   if (r.experience.length) {
-    sec.push(`\\section{Experience}\n${r.experience.map((x) => `\\textbf{${e(x.title)}}${x.company ? `, ${e(x.company)}` : ""}${x.location ? ` -- ${e(x.location)}` : ""} \\hfill ${e(x.dates)}\n${items(x.bullets)}`).join("\n")}`);
+    sec.push(`%--- EXPERIENCE ---\n\\section{Experience}\n\n${r.experience.map((x) => {
+      const where = /remote/i.test(x.location) ? " (Remote)" : "";
+      const head = [x.company, `${x.title}${where}`].filter((s) => s.trim()).map(e).join(" --- ");
+      return `\\expentry{${head}}{${e(x.dates)}}\n${items(x.bullets)}\\vspace{2pt}\n`;
+    }).join("\n")}`);
   }
   if (r.projects.length) {
-    sec.push(`\\section{Projects}\n${r.projects.map((x) => `\\textbf{${e(x.name)}}${x.tech ? ` $|$ \\textit{${e(x.tech)}}` : ""}${x.link ? ` \\hfill ${link(x.link)}` : ""}\n${items(x.bullets)}`).join("\n")}`);
+    sec.push(`%--- PROJECTS ---\n\\section{Projects}\n\n${r.projects.map((x) => {
+      const link = x.link ? ` {\\normalfont\\small${href(x.link, /github\.com|gitlab\.com|bitbucket\.org/i.test(x.link) ? "Code" : "Live")}}` : "";
+      return `\\projentry{${e(x.name)}${link}}{${e(x.tech)}}{}\n${items(x.bullets)}\\vspace{2pt}\n`;
+    }).join("\n")}`);
   }
-  if (r.skills.length) sec.push(`\\section{Technical Skills}\n${r.skills.map((g) => `\\textbf{${e(g.category)}:} ${e(g.items.join(", "))}`).join("\\\\\n")}`);
-  for (const x of r.extras) sec.push(`\\section{${e(x.heading)}}\n${items(x.items)}`);
+  for (const x of r.extras) {
+    const heading = /publication/i.test(x.heading) ? "Research Publications" : x.heading;
+    sec.push(`\\section{${e(heading)}}\n\\begin{itemize}\n${x.items.map((i) => `  \\item ${e(i)}`).join("\n")}\n\\end{itemize}\n\\vspace{2pt}`);
+  }
+  if (r.education.length) {
+    sec.push(`%--- EDUCATION ---\n\\section{Education}\n\n${r.education.map((x) => {
+      const line = [x.degree, x.details].filter(Boolean).map(e).join(" \\hspace{8pt} ");
+      return line ? `\\eduentry{${e(x.school)}}{${e(x.dates)}}{${line}}` : `\\expentry{${e(x.school)}}{${e(x.dates)}}`;
+    }).join("\n\\vspace{2pt}\n")}\n\\vspace{2pt}`);
+  }
+  if (r.skills.length) {
+    sec.push(`%--- SKILLS ---\n\\section{Technical Skills}\n\\vspace{3pt}\n\\begin{itemize}[leftmargin=0pt, label={}, itemsep=2pt]\n${r.skills
+      .map((g) => `  \\item \\textbf{${e(g.category)}:} \\hspace{1pt} ${e(g.items.join(", "))}`).join("\n")}\n\\end{itemize}`);
+  }
 
-  return `\\documentclass[10pt,a4paper]{article}
-\\usepackage[margin=0.55in]{geometry}
-\\usepackage[T1]{fontenc}
-\\usepackage[utf8]{inputenc}
-\\usepackage{lmodern}
-\\usepackage[hidelinks]{hyperref}
-\\usepackage{enumitem}
-\\usepackage{titlesec}
-\\input{glyphtounicode}
-\\pdfgentounicode=1
-\\pagestyle{empty}
-\\setlength{\\parindent}{0pt}
-\\titleformat{\\section}{\\large\\bfseries}{}{0em}{}[\\titlerule]
-\\titlespacing*{\\section}{0pt}{7pt}{4pt}
-\\setlist[itemize]{leftmargin=1.3em,itemsep=0.5pt,topsep=1.5pt,parsep=0pt}
+  return `${RESUME_PREAMBLE}
 \\begin{document}
-\\begin{center}
-{\\LARGE\\bfseries ${e(r.name)}}\\\\[2pt]
-${r.headline ? `${e(r.headline)}\\\\[2pt]\n` : ""}\\small ${contact}
-\\end{center}
+
+%--- HEADER ---
+\\begin{tabular*}{\\textwidth}{l@{\\extracolsep{\\fill}}r}
+  {\\Large\\bfseries ${e(r.name)}} & ${e(r.contact.location)} \\\\[2pt]
+  \\small
+  ${contact} &
+\\end{tabular*}
+
+\\vspace{2pt}
 
 ${sec.join("\n\n")}
 
@@ -393,6 +574,8 @@ Hard rules:
 - Use ONLY facts in the resume and CANDIDATE PROFILE. Never invent employers, titles, dates, tools, skills or results.
   Only use numbers that already appear in them.
 - Must fit on ONE page: tighten wording, merge or drop the least relevant bullets/projects instead of adding.
+- SKILLS TO ADD (if given) go into the Skills section; keep each skills row on one line by removing the skills in that
+  row this job needs least. Don't claim them in bullets unless the resume already shows that work.
 - Mirror the job's keywords only where the candidate genuinely has that skill. Strong, varied action verbs; no first person;
   no exaggeration; avoid repeating the same verb or phrase.
 - Keep it valid LaTeX: escape & % $ # _ in text, balance braces, don't add packages.
@@ -413,12 +596,14 @@ export async function tailorLatex(
   opts: Pick<CompleteOptions, "fetchImpl" | "signal"> = {},
 ): Promise<LatexTailorResult> {
   const originalText = latexToText(input.latex);
-  const source = `${originalText}\n${profileToContext(input.profile)}`;
+  const approved = cleanSkills(input.addSkills);
+  const source = `${originalText}\n${profileToContext(input.profile)}\n${approved.join("\n")}`;
   const user = [
     input.shorten ? "The previous version compiled to MORE THAN ONE PAGE. Shorten it to fit one page.\n" : "",
     `JOB: ${input.job.title ?? ""} at ${input.job.company ?? ""}\n${input.job.text.slice(0, 6000)}`,
     atsNotes(input.atsHints),
     mustInclude(jobSkillsYouHave(input.job.text, source)),
+    toAdd(approved),
     `\nCANDIDATE PROFILE\n${profileToContext(input.profile).slice(0, 6000)}`,
     `\nLATEX RESUME\n${input.latex.slice(0, 20000)}`,
   ].join("\n");
@@ -444,7 +629,8 @@ export async function tailorLatex(
   const jobSkills = [...findSkills(input.job.text).keys()];
   const srcSkills = findSkills(source);
   const inNew = findSkills(newText);
-  const left = jobSkills.filter((k) => srcSkills.has(k) && !inNew.has(k));
+  const newLower = newText.toLowerCase();
+  const left = [...new Set([...jobSkills.filter((k) => srcSkills.has(k)), ...approved.map(canonicalSkill)])].filter((k) => !inNew.has(k) && !newLower.includes(k.toLowerCase()));
   if (left.length) {
     const them = left.length > 1 ? "them" : "it";
     warnings.push(`The job asks for ${left.join(", ")} and your profile shows ${them}, but the tailored resume doesn't mention ${them}. Add ${them} to your Skills section.`);
@@ -453,7 +639,12 @@ export async function tailorLatex(
     latex,
     changes: value.changes,
     warnings,
-    report: buildReport(originalText, newText, input.job, { removed: [], skillGaps: jobSkills.filter((k) => !srcSkills.has(k)), notes: [] }, bullets),
+    report: buildReport(originalText, newText, input.job, {
+      removed: [],
+      skillGaps: jobSkills.filter((k) => !srcSkills.has(k)),
+      notes: [],
+      addedSkills: [...inNew.keys()].filter((k) => !findSkills(originalText).has(k)),
+    }, bullets),
   };
 }
 

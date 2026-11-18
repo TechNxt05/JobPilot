@@ -68,10 +68,10 @@ async function handle(msg: Request) {
     }
     case "tailor-resume": {
       const { profile, resumeText } = await profileAndResume(msg.resumeId);
-      return runAI("tailor-resume", { job: msg.job, profile, resumeText, latex: msg.latex, shorten: msg.shorten }, async (ai) =>
+      return runAI("tailor-resume", { job: msg.job, profile, resumeText, latex: msg.latex, shorten: msg.shorten, addSkills: msg.addSkills }, async (ai) =>
         msg.latex
-          ? { mode: "latex" as const, ...(await tailorLatex(ai, { profile, resumeText, job: msg.job, latex: msg.latex, shorten: msg.shorten })) }
-          : { mode: "profile" as const, ...(await tailorResume(ai, { profile, resumeText, job: msg.job })) });
+          ? { mode: "latex" as const, ...(await tailorLatex(ai, { profile, resumeText, job: msg.job, latex: msg.latex, shorten: msg.shorten, addSkills: msg.addSkills })) }
+          : { mode: "profile" as const, ...(await tailorResume(ai, { profile, resumeText, job: msg.job, addSkills: msg.addSkills })) });
     }
     case "ai-quota":
       return hostedQuota();

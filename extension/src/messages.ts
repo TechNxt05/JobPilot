@@ -8,7 +8,7 @@ export type Request =
   | { type: "draft-answers"; questions: DraftQuestion[]; job: JobPosting | null; answers?: { question: string; answer: string }[] }
   | { type: "parse-resume"; resumeId: string }
   | { type: "cover-letter"; job: Pick<JobPosting, "title" | "company" | "text">; resumeId?: string | null; tone?: CoverLetterTone; words?: number }
-  | { type: "tailor-resume"; job: Pick<JobPosting, "title" | "company" | "text">; resumeId?: string | null; latex?: string; shorten?: boolean };
+  | { type: "tailor-resume"; job: Pick<JobPosting, "title" | "company" | "text">; resumeId?: string | null; latex?: string; shorten?: boolean; addSkills?: string[] };
 
 export type Response<T> = { ok: true; data: T } | { ok: false; error: string };
 

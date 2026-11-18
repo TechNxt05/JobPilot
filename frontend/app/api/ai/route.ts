@@ -81,9 +81,10 @@ export async function POST(req: Request) {
         }), 200, headers);
       case "tailor-resume": {
         const latex = str(body.latex, 60000);
+        const addSkills = (Array.isArray(body.addSkills) ? body.addSkills : []).slice(0, 40).map((x) => str(x, 60)).filter(Boolean);
         const result = latex
-          ? { mode: "latex" as const, ...(await tailorLatex(ai, { profile, resumeText, job, latex, shorten: !!body.shorten })) }
-          : { mode: "profile" as const, ...(await tailorResume(ai, { profile, resumeText, job })) };
+          ? { mode: "latex" as const, ...(await tailorLatex(ai, { profile, resumeText, job, latex, shorten: !!body.shorten, addSkills })) }
+          : { mode: "profile" as const, ...(await tailorResume(ai, { profile, resumeText, job, addSkills })) };
         return json(result, 200, headers);
       }
       default:
