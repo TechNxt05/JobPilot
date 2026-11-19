@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { computeAlignment } from "./alignment";
+import { computeAlignment, findEvidence } from "./alignment";
 import { scoreATS } from "./ats";
 import { extractRequirementsHeuristic, type JobPosting } from "./job";
 import { escapeLatex, escapeUrl, latexPreamble, latexToText } from "./latex";
@@ -94,8 +94,11 @@ Hard rules (violations are automatically removed):
 - Skills: list only skills present in the profile or in SKILLS TO ADD. Prefer the job's wording when the candidate
   genuinely has the skill (e.g. profile "ReactJS" and job "React" → "React"). Group them into at most 6 rows
   (e.g. Languages, AI / ML, Backend & Cloud, Frontend, Developer Tools), most job-relevant first in each row.
-- One page: at most 3 bullets per role, 2 per project, 4 projects, each bullet 20-32 words. Leave "summary" empty.
-- Order bullets and projects by relevance to the job. Drop irrelevant items rather than padding.
+- One page: at most 3 bullets per role, 2 per project, 4 projects. Leave "summary" empty.
+- Bullet length: a printed line holds about 125 characters. Each bullet either fits ONE line (90-125 characters) or
+  fills TWO (210-245 characters). Never a second line with only a few words: tighten the wording instead.
+- Order bullets and projects by relevance to the job. Keep every experience role (fewer bullets for less relevant ones);
+  drop irrelevant projects rather than padding.
 - Start every bullet with a strong, specific past-tense verb; don't reuse the same verb more than twice.
 - No first person, no buzzword stuffing, no exaggeration ("revolutionized", "world-class").
 
@@ -141,13 +144,16 @@ function assemble(
   };
   const clip = (b: string) => b.replace(/^[•\-*\s]+/, "").trim();
 
-  const experience = out.experience
-    .filter((e) => p.experience[e.source_index])
-    .slice(0, 4)
-    .map((e) => {
-      const src = p.experience[e.source_index];
-      let bullets = e.bullets.map(clip).filter(keepBullet).slice(0, 3);
-      if (!bullets.length) bullets = src.description.split("\n").map(clip).filter(Boolean).slice(0, 3); // fall back to the original
+  // Every role stays (dropping one shrinks the experience a recruiter or ATS counts); the ones the model left out
+  // keep their first two original bullets, and one-page trimming shortens bullets, never removes a role
+  const rewritten = new Map(out.experience.filter((e) => p.experience[e.source_index]).map((e) => [e.source_index, e]));
+  const experience = p.experience
+    .map((src, i) => ({ src, e: rewritten.get(i) }))
+    .filter(({ src }) => src.title.trim() || src.company.trim())
+    .slice(0, 6)
+    .map(({ src, e }) => {
+      let bullets = e ? e.bullets.map(clip).filter(keepBullet).slice(0, 3) : [];
+      if (!bullets.length) bullets = src.description.split("\n").map(clip).filter(Boolean).slice(0, e ? 3 : 2); // the original
       return { title: src.title, company: src.company, location: src.location, dates: dates(src.start, src.end), bullets };
     });
   const projects = out.projects
@@ -410,43 +416,168 @@ const wordCount = (t: string) => t.split(/\s+/).filter(Boolean).length;
 /** ~ what fits one A4 page in the resume template (the reference resume fills it at ~640 words) */
 export const ONE_PAGE_WORDS = 620;
 
-/** Remove the least important content until the resume fits the word budget. Returns null when nothing more can go. */
-export function shrinkResume(r: TailoredResume): TailoredResume | null {
-  const c: TailoredResume = JSON.parse(JSON.stringify(r));
-  const longest = <T extends { bullets: string[] }>(xs: T[], min: number) =>
-    xs.map((x, i) => [i, x.bullets.length] as const).filter(([, n]) => n > min).sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0];
-  if (c.extras.some((x) => x.items.length > 3)) { const x = c.extras.find((e) => e.items.length > 3)!; x.items.pop(); return c; }
-  if (c.projects.length > 4) { c.projects.pop(); return c; }
-  let i = longest(c.projects, 2);
-  if (i !== undefined) { c.projects[i].bullets.pop(); return c; }
-  if (c.projects.length > 3) { c.projects.pop(); return c; }
-  if (c.extras.some((x) => x.items.length > 2)) { const x = c.extras.find((e) => e.items.length > 2)!; x.items.pop(); return c; }
-  i = longest(c.experience, 3);
-  if (i !== undefined) { c.experience[i].bullets.pop(); return c; }
-  if (c.projects.length > 2) { c.projects.pop(); return c; }
-  i = longest(c.projects, 2);
-  if (i !== undefined) { c.projects[i].bullets.pop(); return c; }
-  i = longest(c.experience, 3);
-  if (i !== undefined) { c.experience[i].bullets.pop(); return c; }
-  if (c.extras.length) { c.extras.pop(); return c; }
-  if (c.summary) { c.summary = ""; return c; }
-  i = longest(c.projects, 1);
-  if (i !== undefined) { c.projects[i].bullets.pop(); return c; }
-  i = longest(c.experience, 2);
-  if (i !== undefined) { c.experience[i].bullets.pop(); return c; }
-  if (c.projects.length > 1) { c.projects.pop(); return c; }
+/**
+ * Characters a bullet line holds in the resume template (A4, 0.48in margins, Source Sans Pro 10pt). Measured: a bullet
+ * wraps at about 130 characters; 125 leaves room for wide letters and digits.
+ */
+export const BULLET_LINE_CHARS = 125;
+
+/** Printed lines a bullet takes. */
+export const bulletLines = (b: string) => Math.max(1, Math.ceil(b.trim().length / BULLET_LINE_CHARS));
+
+/** Same meaning, fewer characters. Applied in order, only as far as needed. */
+const TIGHTEN: [RegExp, string][] = [
+  [/\bin order to\b/gi, "to"],
+  [/\bdue to the fact that\b/gi, "because"],
+  [/\bfor the purpose of\b/gi, "for"],
+  [/\bwith the help of\b/gi, "with"],
+  [/\bas well as\b/gi, "and"],
+  [/\ba number of\b/gi, "several"],
+  [/\bon a (daily|weekly|monthly) basis\b/gi, "$1"],
+  [/\bsuccessfully\s+/gi, ""],
+  [/\b(effectively|efficiently|seamlessly)\s+/gi, ""],
+  [/\b(a\s+)?(wide\s+)?variety of\s+/gi, ""],
+  [/\bvarious\s+/gi, ""],
+  [/\butili[sz](e|es|ed|ing)\b/gi, "us$1"],
+  [/\bleverag(e|es|ed|ing)\b/gi, "us$1"],
+  [/\bapproximately\s+/gi, "~"],
+  [/(\d)\s*percent\b/gi, "$1%"],
+  [/\b(that|which) (is|are|was|were) (used|built|designed|developed) (to|for)\b/gi, "$3 $4"],
+];
+
+/**
+ * A bullet whose last line holds only a few words, rewritten to take one line fewer using the safe swaps above, or null
+ * when that isn't possible (the bullet is then left as it is).
+ */
+export function tightenBullet(b: string): string | null {
+  const lines = bulletLines(b);
+  if (lines < 2) return null;
+  const spill = b.trim().length - (lines - 1) * BULLET_LINE_CHARS;
+  if (spill > BULLET_LINE_CHARS * 0.35) return null; // a real second line, not a few stray words
+  let t = b.trim();
+  for (const [re, to] of TIGHTEN) {
+    t = t.replace(re, to).replace(/\s{2,}/g, " ").replace(/\s+([,.;:])/g, "$1").trim();
+    if (bulletLines(t) < lines) return t.charAt(0).toUpperCase() + t.slice(1);
+  }
   return null;
 }
 
-export function fitToWords(r: TailoredResume, budget = ONE_PAGE_WORDS): TailoredResume {
+/** Tighten every bullet that spills a few words onto an extra line. Null when none could be tightened. */
+function tightenAll(c: TailoredResume): TailoredResume | null {
+  let changed = false;
+  for (const list of [...c.experience.map((e) => e.bullets), ...c.projects.map((x) => x.bullets)]) {
+    list.forEach((b, i) => {
+      const t = tightenBullet(b);
+      if (t) { list[i] = t; changed = true; }
+    });
+  }
+  return changed ? c : null;
+}
+
+/**
+ * How much each bullet / project matters for the job: the job skills it shows in use. A skill no other bullet shows
+ * counts triple, so the only proof of a job skill is the last thing to go.
+ */
+function relevance(r: TailoredResume, jobSkills: string[]) {
+  const patterns = jobSkills.map((s) => skillPatterns(s));
+  const hits = (text: string) => patterns.map((ps, i) => (ps.some((p) => p.test(text)) ? i : -1)).filter((i) => i >= 0);
+  const texts = [...r.experience.flatMap((e) => e.bullets), ...r.projects.flatMap((x) => [x.tech, ...x.bullets])];
+  const shownIn = new Map<number, number>();
+  for (const t of texts) for (const i of hits(t)) shownIn.set(i, (shownIn.get(i) ?? 0) + 1);
+  // A measured result (a number) is worth keeping too: ATS and recruiters weigh quantified bullets
+  const value = (text: string) => hits(text).reduce((sum, i) => sum + (shownIn.get(i) === 1 ? 3 : 1), 0) + (/\d/.test(text) ? 0.5 : 0);
+  return {
+    /** Index of the bullet to drop: the least relevant, the later one on a tie */
+    bullet: (bullets: string[]) => bullets.reduce((best, b, i) => (value(b) <= value(bullets[best]) ? i : best), 0),
+    /** Index of the project to drop: the least relevant, the later one on a tie */
+    project: (projects: TailoredResume["projects"]) => {
+      const score = (x: TailoredResume["projects"][number]) => value(x.tech) + x.bullets.reduce((s, b) => s + value(b), 0);
+      return projects.reduce((best, x, i) => (score(x) <= score(projects[best]) ? i : best), 0);
+    },
+  };
+}
+
+/**
+ * Remove the least important content (one step) until the resume fits. With the job's skills, the bullets and projects
+ * that show them are kept and the least job-relevant ones go first. Returns null when nothing more can go.
+ */
+export function shrinkResume(r: TailoredResume, jobSkills: string[] = []): TailoredResume | null {
+  const c: TailoredResume = JSON.parse(JSON.stringify(r));
+  // First win space without losing anything: bullets with a few stray words on their last line lose that line
+  const tighter = tightenAll(c);
+  if (tighter) return tighter;
+  const rel = relevance(c, jobSkills);
+  const dropBullet = (bullets: string[]) => bullets.splice(rel.bullet(bullets), 1);
+  const dropProject = () => c.projects.splice(rel.project(c.projects), 1);
+  const longest = <T extends { bullets: string[] }>(xs: T[], min: number) =>
+    xs.map((x, i) => [i, x.bullets.length] as const).filter(([, n]) => n > min).sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0];
+  if (c.extras.some((x) => x.items.length > 3)) { const x = c.extras.find((e) => e.items.length > 3)!; x.items.pop(); return c; }
+  if (c.projects.length > 4) { dropProject(); return c; }
+  let i = longest(c.projects, 2);
+  if (i !== undefined) { dropBullet(c.projects[i].bullets); return c; }
+  if (c.projects.length > 3) { dropProject(); return c; }
+  if (c.extras.some((x) => x.items.length > 2)) { const x = c.extras.find((e) => e.items.length > 2)!; x.items.pop(); return c; }
+  i = longest(c.experience, 3);
+  if (i !== undefined) { dropBullet(c.experience[i].bullets); return c; }
+  if (c.projects.length > 2) { dropProject(); return c; }
+  i = longest(c.projects, 2);
+  if (i !== undefined) { dropBullet(c.projects[i].bullets); return c; }
+  i = longest(c.experience, 3);
+  if (i !== undefined) { dropBullet(c.experience[i].bullets); return c; }
+  if (c.extras.length) { c.extras.pop(); return c; }
+  if (c.summary) { c.summary = ""; return c; }
+  i = longest(c.projects, 1);
+  if (i !== undefined) { dropBullet(c.projects[i].bullets); return c; }
+  i = longest(c.experience, 2);
+  if (i !== undefined) { dropBullet(c.experience[i].bullets); return c; }
+  if (c.projects.length > 1) { dropProject(); return c; }
+  return null;
+}
+
+export function fitToWords(r: TailoredResume, budget = ONE_PAGE_WORDS, jobSkills: string[] = []): TailoredResume {
   let cur = r;
   while (wordCount(resumeText(cur)) > budget) {
-    const next = shrinkResume(cur);
+    const next = shrinkResume(cur, jobSkills);
     if (!next) break;
     cur = next;
   }
   return cur;
 }
+
+/**
+ * Put back proof the rewrite lost: for each job skill the original resume showed in use (an experience / project bullet)
+ * but the tailored one doesn't, add that original bullet, word for word, to the same role or project. Original
+ * bullets are the candidate's own words, so nothing new is claimed.
+ */
+export function restoreEvidence(r: TailoredResume, originalText: string, jobSkills: string[]): { resume: TailoredResume; restored: string[] } {
+  if (!originalText.trim() || !jobSkills.length) return { resume: r, restored: [] };
+  const before = analyzeResume(originalText);
+  const c: TailoredResume = JSON.parse(JSON.stringify(r));
+  const restored: string[] = [];
+  const clean = (l: string) => l.replace(/^([•\-*▪●◦‣–·]|\d+[.)])\s+/, "").trim();
+  for (const skill of jobSkills) {
+    const was = findEvidence(skill, before);
+    if (was?.strength !== "demonstrated") continue;
+    const now = findEvidence(skill, analyzeResume(resumeText(c)));
+    if (now?.strength === "demonstrated") continue;
+    // The role / project the original bullet sat under: the first non-bullet line above it
+    const at = before.lines.indexOf(was.line);
+    let h = at - 1;
+    while (h >= 0 && /^([•\-*▪●◦‣–·]|\d+[.)])\s+/.test(before.lines[h])) h--;
+    const heading = h >= 0 ? before.lines[h].toLowerCase() : "";
+    const named = (name: string) => !!name.trim() && heading.includes(name.trim().toLowerCase());
+    const target =
+      c.experience.find((e) => named(e.company) || named(e.title))?.bullets ??
+      c.projects.find((x) => named(projectName(x.name)))?.bullets;
+    const bullet = clean(was.line);
+    if (!target || target.some((b) => b.trim() === bullet)) continue;
+    target.push(bullet);
+    restored.push(skill);
+  }
+  return { resume: c, restored };
+}
+
+const projectName = (name: string) => name.split(/\s[-–—|:]\s|\s\(/)[0];
 
 export function buildReport(
   beforeText: string,
@@ -480,6 +611,8 @@ export interface TailorInput {
   atsHints?: string[];
   /** Skills the candidate approved for this resume (see missingJobSkills); added to the Skills section */
   addSkills?: string[];
+  /** The job's skills as the job analysis read them (required + preferred); kept in use when trimming */
+  jobSkills?: string[];
 }
 
 const cleanSkills = (xs?: string[]) => [...new Set((xs ?? []).map((x) => String(x).trim()).filter((x) => x && x.length <= 60))].slice(0, 40);
@@ -511,7 +644,11 @@ export async function tailorResume(ai: AIConfig, input: TailorInput, opts: Pick<
     ...input.profile.projects.flatMap((x) => [x.tech, x.description]),
   ].join("\n");
   const { resume, report } = assemble(input.profile, value, source, input.job.text, approved, workText, input.job.title ?? "");
-  const fitted = fitToWords(resume);
+  // The job's skills (the analysis's list when given): their proof is restored if the rewrite lost it, and kept when
+  // trimming to one page, so tailoring never lowers the job match
+  const jobSkills = jobSkillList(input.job.text, [...cleanSkills(input.jobSkills), ...approved]);
+  const kept = restoreEvidence(resume, input.resumeText, jobSkills).resume;
+  const fitted = fitToWords(kept, ONE_PAGE_WORDS, jobSkills);
   const bullets = [...fitted.experience.flatMap((e) => e.bullets), ...fitted.projects.flatMap((x) => x.bullets)];
   return { resume: fitted, report: buildReport(input.resumeText || source, resumeText(fitted), input.job, report, bullets) };
 }
@@ -728,16 +865,18 @@ export async function compileOnePage(
   compile: (latex: string) => Promise<Uint8Array>,
   countPages: (pdf: Uint8Array) => Promise<number>,
   maxPasses = 6,
+  /** The job's skills: bullets and projects showing them are the last to be trimmed */
+  jobSkills: string[] = [],
 ): Promise<{ resume: TailoredResume; latex: string; pdf: Uint8Array; pages: number }> {
-  let current = fitToWords(resume);
+  let current = fitToWords(resume, ONE_PAGE_WORDS, jobSkills);
   let latex = renderResumeLatex(current);
   let pdf = await compile(latex);
   let pages = await countPages(pdf);
   for (let i = 0; pages > 1 && i < maxPasses; i++) {
     // Two trims per pass (each compile is slow), but keep the first one even if the second has nothing left to cut
-    const once = shrinkResume(current);
+    const once = shrinkResume(current, jobSkills);
     if (!once) break;
-    const next = shrinkResume(once) ?? once;
+    const next = shrinkResume(once, jobSkills) ?? once;
     current = next;
     latex = renderResumeLatex(current);
     pdf = await compile(latex);

@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import {
   addSkillsToProfile,
+  analyzeResume,
   compileLatex,
+  computeAlignment,
+  latexToText,
+  resumeText,
+  scoreATS,
+  type JobRequirements,
   jobSkillList,
   markInProfile,
   missingJobSkills,
@@ -58,8 +64,10 @@ function openInOverleaf(latex: string, name: string) {
 const compileErr = (e: unknown) => (e instanceof LatexError ? `${e.message}\n${latexLogErrors(e.log)}` : (e as Error).message);
 
 /** Cover letter + tailored resume for the analyzed job (uses the user's own AI keys). */
-export function ApplyKit({ job, jobSkills = [], missingSkills, resumeId, keySet, goTo }: {
+export function ApplyKit({ job, jobSkills = [], missingSkills, requirements, resumeId, keySet, goTo }: {
   job: JobPosting;
+  /** The job analysis's requirements: the tailored resume is scored against the same list as the Analyze breakdown */
+  requirements?: JobRequirements;
   /** Skills the job analysis scraped from the posting (required + preferred) */
   jobSkills?: string[];
   /** The breakdown's missing skills for the selected resume: the picker lists exactly these */
@@ -158,13 +166,15 @@ export function ApplyKit({ job, jobSkills = [], missingSkills, resumeId, keySet,
     setTailorBusy("Tailoring with AI…");
     const addSkills = missing.map((m) => m.skill).filter((s) => picked.has(s));
     await syncPickedToProfile(addSkills).catch(() => {});
-    const res = await send<TailorResult>({ type: "tailor-resume", job: jobInfo, resumeId, latex: latexIn.trim() || undefined, addSkills });
+    // Every skill the job asks for: tailoring keeps the bullets that show them when it trims to one page
+    const allJobSkills = jobSkillList(job.text, jobSkills);
+    const res = await send<TailorResult>({ type: "tailor-resume", job: jobInfo, resumeId, latex: latexIn.trim() || undefined, addSkills, jobSkills: allJobSkills });
     if (!res.ok) { setTailorBusy(""); return setTailorErr(res.error); }
     let result = res.data;
     try {
       setTailorBusy("Compiling PDF…");
       if (result.mode === "profile") {
-        const out = await compileOnePage(result.resume, async (t) => (await compileLatex(t)).pdf, pdfPageCount);
+        const out = await compileOnePage(result.resume, async (t) => (await compileLatex(t)).pdf, pdfPageCount, 6, allJobSkills);
         result = { ...result, resume: out.resume };
         setTailoredTex(out.latex);
         setPdf({ url: pdfUrl(out.pdf), pages: out.pages });
@@ -174,7 +184,7 @@ export function ApplyKit({ job, jobSkills = [], missingSkills, resumeId, keySet,
         let pages = await pdfPageCount(compiled.pdf);
         if (pages > 1) {
           setTailorBusy("Over one page: shortening…");
-          const again = await send<TailorResult>({ type: "tailor-resume", job: jobInfo, resumeId, latex: result.latex, shorten: true, addSkills });
+          const again = await send<TailorResult>({ type: "tailor-resume", job: jobInfo, resumeId, latex: result.latex, shorten: true, addSkills, jobSkills: allJobSkills });
           if (again.ok && again.data.mode === "latex") {
             const c2 = await compileLatex(again.data.latex);
             const p2 = await pdfPageCount(c2.pdf);
@@ -189,9 +199,30 @@ export function ApplyKit({ job, jobSkills = [], missingSkills, resumeId, keySet,
       setTailorErr(`PDF: ${compileErr(e)}`);
       setTailoredTex(result.mode === "latex" ? result.latex : renderResumeLatex(result.resume));
     } finally {
-      setTailor(result);
+      setTailor(await rescore(result).catch(() => result));
       setTailorBusy("");
     }
+  }
+
+  /**
+   * Score what's actually in the final PDF (after one-page trimming), against the same requirements as the Analyze
+   * breakdown, so "Job match" before = the Analyze score for this resume.
+   */
+  async function rescore(r: TailorResult): Promise<TailorResult> {
+    if (!requirements) return r;
+    const resumes = await getResumes();
+    const original = resumes.find((x) => x.id === resumeId) ?? resumes[resumes.length - 1];
+    const after = analyzeResume(r.mode === "profile" ? resumeText(r.resume) : latexToText(r.latex));
+    const before = original ? analyzeResume(original.text) : null;
+    return {
+      ...r,
+      report: {
+        ...r.report,
+        atsAfter: scoreATS(after).score,
+        alignmentAfter: computeAlignment(requirements, after).overall,
+        ...(before ? { atsBefore: scoreATS(before).score, alignmentBefore: computeAlignment(requirements, before).overall } : {}),
+      },
+    };
   }
 
   if (!keySet) {

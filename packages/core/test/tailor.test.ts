@@ -7,6 +7,9 @@ import {
   coverLetterText,
   escapeLatex,
   fitToWords,
+  shrinkResume,
+  tightenBullet,
+  BULLET_LINE_CHARS,
   fitSkillRows,
   cleanJobTitle,
   titleLine,
@@ -138,9 +141,14 @@ describe("tailorResume (no LaTeX given)", () => {
     const { resume, report } = await tailorResume({ provider: "groq", apiKey: "gsk_x" }, { profile, resumeText: RESUME, job }, { fetchImpl: fetchImpl as unknown as typeof fetch });
     expect(resume.name).toBe("Priya Sharma");
     expect(resume.contact.email).toBe("priya.sharma@example.com");
-    expect(resume.experience).toHaveLength(1); // source_index 9 doesn't exist
+    // source_index 9 does not exist; the role the model left out (ML Research Intern) is kept with its own bullets
+    expect(resume.experience.map((e) => e.title)).toEqual(["Software Engineering Intern", "ML Research Intern"]);
+    expect(resume.experience[1].bullets[0]).toBe("Trained PyTorch models for text classification on 120k samples");
     expect(resume.experience[0]).toMatchObject({ title: "Software Engineering Intern", company: "Flipkart", dates: "May 2024 – Jul 2024" });
-    expect(resume.experience[0].bullets).toEqual(["Reduced API latency by 35% by adding Redis caching to a Node.js service"]);
+    // The rewrite dropped the only bullets showing React and Jest-tested work the job wants: the originals come back
+    expect(resume.experience[0].bullets[0]).toBe("Reduced API latency by 35% by adding Redis caching to a Node.js service");
+    expect(resume.experience[0].bullets).toContain("Built a React dashboard used by 40+ sellers to track returns");
+    expect(report.alignmentAfter!).toBeGreaterThanOrEqual(report.alignmentBefore!);
     // Kubernetes removed (not in the profile); job skills the profile shows (Java) are added back
     expect(resume.skills[0].items.slice(0, 2)).toEqual(["Python", "TypeScript"]);
     expect(resume.skills.flatMap((g) => g.items)).not.toContain("Kubernetes");
@@ -340,5 +348,65 @@ describe("approved skills (skill picker)", () => {
     // No analysis list: falls back to dictionary hits in the posting
     expect(missingJobSkills(jd, "Python", profile).map((m) => m.skill)).toEqual(expect.arrayContaining(["Ruby", "Ruby on Rails"]));
     expect(markInProfile(["Sidekiq", "Go"], { ...profile, skills: ["Sidekiq"] })).toEqual([{ skill: "Sidekiq", inProfile: true }, { skill: "Go", inProfile: false }]);
+  });
+});
+
+describe("one-page trimming keeps the job's proof", () => {
+  it("drops the least job-relevant bullet and project, not simply the last one", () => {
+    const r = {
+      name: "A", headline: "", contact: { email: "", phone: "", location: "", linkedin: "", github: "", portfolio: "" }, summary: "",
+      education: [], extras: [], skills: [],
+      experience: [{ title: "Intern", company: "Acme", location: "", dates: "", bullets: [
+        "Wrote internal docs for the onboarding wiki",
+        "Organised weekly team demos and retros",
+        "Planned the quarterly offsite agenda",
+        "Built the billing service in Kubernetes on AWS",
+      ] }],
+      projects: [
+        { name: "Chatbot", link: "", tech: "Python", bullets: ["Built a GraphQL API for the chatbot"] },
+        { name: "Blog", link: "", tech: "", bullets: ["Wrote posts"] },
+        { name: "Game", link: "", tech: "", bullets: ["Made a puzzle game"] },
+      ],
+    };
+    const jobSkills = ["Kubernetes", "AWS", "GraphQL"];
+    const once = shrinkResume(r, jobSkills)!;
+    // First a bullet from the 4-bullet role: a job-irrelevant one (the later one on a tie), never the only Kubernetes / AWS proof
+    expect(once.experience[0].bullets).toEqual([
+      "Wrote internal docs for the onboarding wiki",
+      "Organised weekly team demos and retros",
+      "Built the billing service in Kubernetes on AWS",
+    ]);
+    // Then a project: a job-irrelevant one, not the GraphQL one
+    expect(shrinkResume(once, jobSkills)!.projects.map((x) => x.name)).toEqual(["Chatbot", "Blog"]);
+    // The old behaviour, removing the last bullet, would have lost the Kubernetes / AWS proof
+    expect(shrinkResume(r)!.experience[0].bullets).not.toContain("Built the billing service in Kubernetes on AWS");
+  });
+});
+
+describe("tightening bullets that spill onto an extra line", () => {
+  const spill = "Successfully utilized FastAPI and PostgreSQL in order to build a retrieval service that cut ticket triage time for the support team";
+  it("saves the line with same-meaning wording, only when it saves the line", () => {
+    expect(spill.length).toBeGreaterThan(BULLET_LINE_CHARS);
+    const t = tightenBullet(spill)!;
+    expect(t.length).toBeLessThanOrEqual(BULLET_LINE_CHARS);
+    // The smallest edit that saves the line: the rest of the wording stays yours
+    expect(t).toBe("Successfully utilized FastAPI and PostgreSQL to build a retrieval service that cut ticket triage time for the support team");
+    // Already one line, or a real second line, or nothing to tighten: left alone
+    expect(tightenBullet("Built a retrieval service with FastAPI")).toBeNull();
+    expect(tightenBullet("x ".repeat(100))).toBeNull();
+    expect(tightenBullet("Built a retrieval service with FastAPI and PostgreSQL that cut ticket triage time for the support team across three regions")).toBeNull();
+  });
+
+  it("tightens before removing anything", () => {
+    const r = {
+      name: "A", headline: "", contact: { email: "", phone: "", location: "", linkedin: "", github: "", portfolio: "" }, summary: "",
+      education: [], extras: [], skills: [], projects: [],
+      experience: [{ title: "Intern", company: "Acme", location: "", dates: "", bullets: ["Wrote docs", "Ran demos", "Planned offsite", spill] }],
+    };
+    const once = shrinkResume(r)!;
+    expect(once.experience[0].bullets).toHaveLength(4);
+    expect(once.experience[0].bullets[3].length).toBeLessThanOrEqual(BULLET_LINE_CHARS);
+    // Nothing left to tighten: now a bullet goes
+    expect(shrinkResume(once)!.experience[0].bullets).toHaveLength(3);
   });
 });

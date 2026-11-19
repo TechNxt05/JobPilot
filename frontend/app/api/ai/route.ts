@@ -28,7 +28,7 @@ export const maxDuration = 120;
  * POST { task: "draft-answers", questions, job?, profile, resumeText, answers? }
  * POST { task: "parse-resume", text }
  * POST { task: "cover-letter", job, profile, resumeText, tone?, words? }
- * POST { task: "tailor-resume", job, profile, resumeText, latex?, shorten? }
+ * POST { task: "tailor-resume", job, profile, resumeText, latex?, shorten?, addSkills?, jobSkills? }
  * POST { task: "cold-email", job?, contact: { name, company, title, department }, profile, resumeText }
  */
 
@@ -92,9 +92,10 @@ export async function POST(req: Request) {
       case "tailor-resume": {
         const latex = str(body.latex, 60000);
         const addSkills = (Array.isArray(body.addSkills) ? body.addSkills : []).slice(0, 40).map((x) => str(x, 60)).filter(Boolean);
+        const jobSkills = (Array.isArray(body.jobSkills) ? body.jobSkills : []).slice(0, 60).map((x) => str(x, 60)).filter(Boolean);
         const result = latex
           ? { mode: "latex" as const, ...(await tailorLatex(ai, { profile, resumeText, job, latex, shorten: !!body.shorten, addSkills })) }
-          : { mode: "profile" as const, ...(await tailorResume(ai, { profile, resumeText, job, addSkills })) };
+          : { mode: "profile" as const, ...(await tailorResume(ai, { profile, resumeText, job, addSkills, jobSkills })) };
         return json(result, 200, headers);
       }
       default:

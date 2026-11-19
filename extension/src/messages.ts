@@ -9,7 +9,7 @@ export type Request =
   | { type: "parse-resume"; resumeId: string }
   | { type: "cover-letter"; job: Pick<JobPosting, "title" | "company" | "text">; resumeId?: string | null; tone?: CoverLetterTone; words?: number }
   | { type: "cold-email"; job: Pick<JobPosting, "title" | "url" | "text"> | null; contact: Pick<Contact, "name" | "company" | "title" | "department">; resumeId?: string | null }
-  | { type: "tailor-resume"; job: Pick<JobPosting, "title" | "company" | "text">; resumeId?: string | null; latex?: string; shorten?: boolean; addSkills?: string[] };
+  | { type: "tailor-resume"; job: Pick<JobPosting, "title" | "company" | "text">; resumeId?: string | null; latex?: string; shorten?: boolean; addSkills?: string[]; jobSkills?: string[] };
 
 export type Response<T> = { ok: true; data: T } | { ok: false; error: string };
 
