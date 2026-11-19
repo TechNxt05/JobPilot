@@ -142,6 +142,7 @@ Live at `https://job-pilot-orcin.vercel.app`.
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `sb_publishable_…` |
    | `NEXT_PUBLIC_API_URL` | `https://jobpilot-api-190640980886.asia-south1.run.app` (no trailing `/`) |
    | `GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `SERPER_API_KEY` | same keys as Cloud Run |
+   | `MISTRAL_API_KEY` | optional: Mistral key (free "Experiment" plan at console.mistral.ai); joins the AI fallback chain after Groq |
 
    `NEXT_PUBLIC_*` values are public by design. The AI keys are server-only and never reach browsers. After changing a variable, **Redeploy** in Vercel (Deployments → ⋯ → Redeploy), because `NEXT_PUBLIC_*` values are baked in at build time.
 4. To get a nicer address, rename the project under Settings → General, or add your own domain. If the address changes, update Supabase URLs (1.3) and `CORS_ORIGINS` (3.5).

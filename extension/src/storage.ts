@@ -20,7 +20,7 @@ export interface AISettings {
 
 export type ApiKeys = Partial<Record<ProviderId, string>>;
 
-export const ALL_PROVIDERS: ProviderId[] = ["groq", "gemini", "openrouter", "openai"];
+export const ALL_PROVIDERS: ProviderId[] = ["groq", "mistral", "gemini", "openrouter", "openai"];
 const DEFAULT_SETTINGS: AISettings = { order: [...ALL_PROVIDERS], models: {}, persistKey: false };
 const KEYS = "apiKeys";
 const LEGACY_KEY = "apiKey";

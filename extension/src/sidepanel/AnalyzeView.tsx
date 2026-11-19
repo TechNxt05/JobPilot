@@ -150,7 +150,8 @@ export function AnalyzeView({ resumes, keySet, goTo, onScanned }: Props) {
               <Eligibility report={selected.alignment} />
               <div className="card">
                 <h3>Breakdown</h3>
-                {selected.alignment.dimensions.map((d) => <DimensionRow key={d.id} d={d} />)}
+                {selected.alignment.dimensions.map((d) => <DimensionRow key={d.id} d={d} share={shareOf(d, selected.alignment)} />)}
+                <ScoreFormula report={selected.alignment} />
                 <p className="hint">
                   Requirements read by {analysis.requirements.origin === "ai" ? "AI (scores still computed by rules)" : "keyword rules"}.
                   {analysis.requirements.origin === "heuristic" && !keySet && " Turn on AI in Settings for more accurate extraction."}
@@ -230,16 +231,36 @@ function Eligibility({ report }: { report: AlignmentReport }) {
   );
 }
 
-function DimensionRow({ d }: { d: Dimension }) {
+/** Share of the overall score a row carries: its weight among the rows this posting has requirements for. */
+function shareOf(d: Dimension, report: AlignmentReport): number | null {
+  if (d.score === null) return null;
+  const total = report.dimensions.filter((x) => x.score !== null).reduce((s, x) => s + x.weight, 0);
+  return total ? Math.round((d.weight / total) * 100) : null;
+}
+
+/** "52 = 38% × 77% (Required skills) + 100% × 23% (Education)": how the overall score is made. */
+function ScoreFormula({ report }: { report: AlignmentReport }) {
+  const counted = report.dimensions.filter((d) => d.score !== null);
+  const skipped = report.dimensions.filter((d) => d.score === null);
+  if (report.overall === null || !counted.length) return null;
+  return (
+    <p className="hint">
+      Score {report.overall} = {counted.map((d) => `${d.label} ${d.score}% × ${shareOf(d, report)}%`).join(" + ")}.
+      {skipped.length > 0 && ` ${skipped.map((d) => d.label).join(", ")} ${skipped.length > 1 ? "aren't" : "isn't"} counted: this posting doesn't ask for ${skipped.length > 1 ? "them" : "it"}.`}
+    </p>
+  );
+}
+
+function DimensionRow({ d, share }: { d: Dimension; share: number | null }) {
   const [open, setOpen] = useState(false);
   const expandable = d.matched.length > 0 || d.missing.length > 0;
   return (
-    <div className="dim">
+    <div className={`dim ${d.score === null ? "not-counted" : ""}`}>
       <button className="dim-head" onClick={() => expandable && setOpen(!open)} aria-expanded={open} disabled={!expandable}>
-        <span className="dim-label">{d.label}</span>
-        <span className={`dim-score ${band(d.score)}`}>{d.score === null ? "n/a" : `${d.score}%`}</span>
+        <span className="dim-label">{d.label}{share !== null && <span className="muted small"> · {share}% of score</span>}</span>
+        <span className={`dim-score ${band(d.score)}`}>{d.score === null ? "Not counted" : `${d.score}%`}</span>
       </button>
-      <div className="bar"><div className={`fill ${band(d.score)}`} style={{ width: `${d.score ?? 0}%` }} /></div>
+      {d.score !== null && <div className="bar"><div className={`fill ${band(d.score)}`} style={{ width: `${d.score}%` }} /></div>}
       <div className="muted small">{d.note}{expandable ? (open ? " · hide" : " · details") : ""}</div>
       {open && (
         <div className="dim-body">

@@ -7,15 +7,16 @@ const ENV: Record<ProviderId, { key?: string; model?: string }> = {
   groq: { key: process.env.GROQ_API_KEY, model: process.env.GROQ_MODEL },
   gemini: { key: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL },
   openrouter: { key: process.env.OPENROUTER_API_KEY, model: process.env.OPENROUTER_MODEL },
+  mistral: { key: process.env.MISTRAL_API_KEY, model: process.env.MISTRAL_MODEL },
   openai: { key: process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL },
 };
 
 /**
- * Server-side AI providers in fallback order (LLM_FALLBACK_ORDER, default groq → gemini → openrouter → openai).
+ * Server-side AI providers in fallback order (LLM_FALLBACK_ORDER, default groq → mistral → gemini → openrouter → openai).
  * Every provider with a key joins the chain; if one fails, the next is tried. Keys never reach the browser.
  */
 export function serverAI(): ProviderConfig[] | null {
-  const order = (process.env.LLM_FALLBACK_ORDER || "groq,gemini,openrouter,openai").split(",").map((s) => s.trim()) as ProviderId[];
+  const order = (process.env.LLM_FALLBACK_ORDER || "groq,mistral,gemini,openrouter,openai").split(",").map((s) => s.trim()) as ProviderId[];
   const configs = order
     .filter((p) => isRealKey(ENV[p]?.key))
     .map((p) => ({ provider: p, apiKey: ENV[p].key!, model: ENV[p].model || undefined }));
@@ -65,7 +66,7 @@ export async function quotaStatus(supabase: SupabaseClient): Promise<{ remaining
 
 export const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => Response.json(body, { status, headers });
 
-export const NO_AI = () => json({ error: "AI isn't configured on this server. Add GROQ_API_KEY (and optionally GEMINI_API_KEY / OPENROUTER_API_KEY as fallbacks)." }, 503);
+export const NO_AI = () => json({ error: "AI isn't configured on this server. Add GROQ_API_KEY (and optionally MISTRAL_API_KEY / GEMINI_API_KEY / OPENROUTER_API_KEY as fallbacks)." }, 503);
 
 /** Auth + AI keys + quota in one step for AI routes. Returns either the context or an error Response. */
 export async function aiGate(req: Request): Promise<

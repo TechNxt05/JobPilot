@@ -254,3 +254,7 @@ details.card[open] > summary { margin-bottom: 4px; }
 a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .email-draft { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 .email-draft textarea { font-size: 12px; line-height: 1.45; }
+
+/* Breakdown rows the posting has no requirement for: shown, but clearly not part of the score */
+.dim.not-counted .dim-label, .dim.not-counted .dim-score { color: var(--muted); font-weight: 500; }
+.dim.not-counted .dim-score { font-size: 12px; }

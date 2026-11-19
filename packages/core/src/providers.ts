@@ -7,7 +7,7 @@ import { z } from "zod";
  * from any error message before it is thrown.
  */
 
-export type ProviderId = "groq" | "openai" | "gemini" | "openrouter";
+export type ProviderId = "groq" | "openai" | "gemini" | "openrouter" | "mistral";
 
 export interface ProviderConfig {
   provider: ProviderId;
@@ -55,12 +55,21 @@ export const PROVIDERS: Record<ProviderId, ProviderInfo> = {
     keyUrl: "https://openrouter.ai/keys",
     origin: "https://openrouter.ai",
   },
+  mistral: {
+    id: "mistral",
+    label: "Mistral",
+    // Free "Experiment" plan (phone verification); supports JSON mode
+    defaultModel: "mistral-small-latest",
+    keyUrl: "https://console.mistral.ai/api-keys",
+    origin: "https://api.mistral.ai",
+  },
 };
 
 const OPENAI_COMPATIBLE_BASE: Partial<Record<ProviderId, string>> = {
   groq: "https://api.groq.com/openai/v1",
   openai: "https://api.openai.com/v1",
   openrouter: "https://openrouter.ai/api/v1",
+  mistral: "https://api.mistral.ai/v1",
 };
 
 export class ProviderError extends Error {
@@ -68,10 +77,22 @@ export class ProviderError extends Error {
     message: string,
     public status: number | null,
     public kind: "auth" | "rate_limit" | "bad_request" | "server" | "network" | "invalid_output",
+    /** Rate limits: how long the provider asked to wait before retrying */
+    public retryAfterMs?: number,
   ) {
     super(message);
     this.name = "ProviderError";
   }
+}
+
+/** Wait the provider asked for: a Retry-After header (seconds), or "try again in 23.8s / 1m2s / 450ms" in the message. */
+export function retryAfterMs(header: string | null, message: string): number | undefined {
+  const secs = Number(header);
+  if (header && Number.isFinite(secs) && secs >= 0) return Math.ceil(secs * 1000);
+  const m = message.match(/try again in\s+(?:(\d+)m)?\s*(\d+(?:\.\d+)?)\s*(ms|s)\b/i);
+  if (!m) return undefined;
+  const value = Number(m[2]) * (m[3].toLowerCase() === "ms" ? 1 : 1000);
+  return Math.ceil(Number(m[1] ?? 0) * 60_000 + value);
 }
 
 function scrub(message: string, apiKey: string): string {
@@ -108,6 +129,8 @@ export interface CompleteOptions {
   maxTokens?: number;
   /** Per-provider time limit in ms before falling back to the next provider (default 45 s) */
   timeoutMs?: number;
+  /** When every provider is rate-limited: the longest "try again in …" worth waiting for once (default 30 s) */
+  maxRetryWaitMs?: number;
 }
 
 /** Single chat completion; returns the raw text content. */
@@ -164,7 +187,8 @@ export async function complete(config: ProviderConfig, opts: CompleteOptions): P
     const detail = scrub(await readError(res), config.apiKey);
     const kind = kindForStatus(res.status);
     const hint = kind === "auth" ? " (check your API key)" : kind === "rate_limit" ? " (rate limited; try again shortly)" : "";
-    throw new ProviderError(`${PROVIDERS[config.provider].label} error ${res.status}: ${detail}${hint}`, res.status, kind);
+    throw new ProviderError(`${PROVIDERS[config.provider].label} error ${res.status}: ${detail}${hint}`, res.status, kind,
+      kind === "rate_limit" ? retryAfterMs(res.headers.get("retry-after"), detail) : undefined);
   }
 
   const body = await res.json();
@@ -184,10 +208,58 @@ export function parseJSONLoose(text: string): unknown {
     return JSON.parse(candidate);
   } catch {
     const start = candidate.search(/[[{]/);
+    if (start < 0) throw new ProviderError("The model did not return valid JSON", null, "invalid_output");
     const end = Math.max(candidate.lastIndexOf("}"), candidate.lastIndexOf("]"));
-    if (start >= 0 && end > start) return JSON.parse(candidate.slice(start, end + 1));
+    const sliced = end > start ? candidate.slice(start, end + 1) : candidate.slice(start);
+    for (const attempt of [sliced, repairJSON(sliced), repairJSON(candidate.slice(start))]) {
+      try {
+        return JSON.parse(attempt);
+      } catch {
+        /* next */
+      }
+    }
     throw new ProviderError("The model did not return valid JSON", null, "invalid_output");
   }
+}
+
+/**
+ * Fix the slips models make in long JSON: a missing comma between items, a trailing comma, raw line breaks inside
+ * strings, and an answer cut off before its closing quotes / brackets.
+ */
+export function repairJSON(text: string): string {
+  let out = "";
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  // Last significant character outside strings, to spot a missing comma before the next value
+  let prev = "";
+  let gap = false; // whitespace since `prev` (so "12" or "true" isn't split into two values)
+  for (const ch of text) {
+    if (inString) {
+      if (escaped) { escaped = false; out += ch; continue; }
+      if (ch === "\\") { escaped = true; out += ch; continue; }
+      if (ch === '"') { inString = false; prev = '"'; gap = false; out += ch; continue; }
+      out += ch === "\n" ? "\\n" : ch === "\r" ? "" : ch === "\t" ? "\\t" : ch;
+      continue;
+    }
+    if (/\s/.test(ch)) { out += ch; gap = true; continue; }
+    // A value right after another value: the comma is missing
+    const startsValue = ch === '"' || ch === "{" || ch === "[" || /[-\dtfn]/.test(ch);
+    const endedValue = prev === '"' || prev === "}" || prev === "]" || (gap && /[\del]/.test(prev));
+    if (startsValue && endedValue && stack.length) out = out.replace(/\s*$/, "") + ",";
+    gap = false;
+    if (ch === "}" || ch === "]") out = out.replace(/,\s*$/, ""); // trailing comma
+    if (ch === '"') inString = true;
+    else if (ch === "{" || ch === "[") stack.push(ch === "{" ? "}" : "]");
+    else if (ch === "}" || ch === "]") stack.pop();
+    out += ch;
+    prev = ch;
+  }
+  // Cut off mid-answer: close the open string, drop a dangling key or comma, close the brackets
+  if (inString) out += '"';
+  out = out.replace(/,\s*$/, "").replace(/,\s*"[^"]*"\s*:?\s*$/, "").replace(/:\s*$/, ": null");
+  while (stack.length) out += stack.pop();
+  return out;
 }
 
 /* ------------------------------ Lenient output schemas ------------------------------ */
@@ -249,8 +321,9 @@ export async function completeParsed<T>(
   const configs = toConfigs(ai);
   if (!configs.length) throw new ProviderError("No AI provider configured. Add an API key in Settings.", null, "auth");
   const attempts: Attempt[] = [];
-  let last: ProviderError | null = null;
-  for (const config of configs) {
+  const failed: { config: ProviderConfig; error: ProviderError }[] = [];
+
+  async function attempt(config: ProviderConfig, nudge = ""): Promise<{ value: T } | null> {
     const model = config.model?.trim() || PROVIDERS[config.provider].defaultModel;
     try {
       // A provider that hangs must not block the fallback chain: abort it after timeoutMs
@@ -259,7 +332,7 @@ export async function completeParsed<T>(
       const signal = opts.signal ? AbortSignal.any([opts.signal, timer.signal]) : timer.signal;
       let raw: string;
       try {
-        raw = await complete(config, { ...opts, signal });
+        raw = await complete(config, { ...opts, system: opts.system + nudge, signal });
       } catch (e) {
         if ((e as Error)?.name === "AbortError" && !opts.signal?.aborted) {
           throw new ProviderError(`${PROVIDERS[config.provider].label} timed out after ${Math.round((opts.timeoutMs ?? 45_000) / 1000)} s`, null, "network");
@@ -270,14 +343,50 @@ export async function completeParsed<T>(
       }
       const value = parse(raw);
       attempts.push({ provider: config.provider, model });
-      return { value, provider: config.provider, attempts };
+      return { value };
     } catch (e) {
       if ((e as Error)?.name === "AbortError" && opts.signal?.aborted) throw e;
       const err = e instanceof ProviderError ? e : new ProviderError(scrub((e as Error).message ?? String(e), config.apiKey), null, "invalid_output");
       attempts.push({ provider: config.provider, model, error: err.message });
-      last = err;
+      failed.push({ config, error: err });
+      return null;
     }
   }
-  const summary = attempts.map((a) => a.error).join(" · ");
-  throw new ProviderError(configs.length > 1 ? `All ${configs.length} AI providers failed: ${summary}` : summary, last?.status ?? null, last?.kind ?? "server");
+
+  for (const config of configs) {
+    const ok = await attempt(config);
+    if (ok) return { value: ok.value, provider: config.provider, attempts };
+  }
+
+  // Everyone failed. Second chance for failures that usually pass on a retry:
+  // 1. a reply that wasn't valid JSON (asked again, reminded to check the JSON);
+  // 2. a short rate limit ("try again in 24s"): wait it out once, then retry.
+  const firstRound = [...failed];
+  const nudge = "\n\nIMPORTANT: reply with one complete, valid JSON object. Check every comma, quote and bracket.";
+  for (const { config } of firstRound.filter((f) => f.error.kind === "invalid_output")) {
+    const ok = await attempt(config, nudge);
+    if (ok) return { value: ok.value, provider: config.provider, attempts };
+  }
+  const maxWait = opts.maxRetryWaitMs ?? 30_000;
+  const limited = firstRound
+    .filter((f) => f.error.kind === "rate_limit" && f.error.retryAfterMs !== undefined && f.error.retryAfterMs <= maxWait)
+    .sort((a, b) => a.error.retryAfterMs! - b.error.retryAfterMs!);
+  if (limited.length) {
+    await sleep(limited[0].error.retryAfterMs! + 500, opts.signal);
+    for (const { config } of limited) {
+      const ok = await attempt(config);
+      if (ok) return { value: ok.value, provider: config.provider, attempts };
+    }
+  }
+
+  const summary = attempts.map((a) => a.error).filter(Boolean).join(" · ");
+  const lastErr = failed[failed.length - 1]?.error;
+  throw new ProviderError(configs.length > 1 ? `All ${configs.length} AI providers failed: ${summary}` : summary, lastErr?.status ?? null, lastErr?.kind ?? "server");
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => { clearTimeout(t); reject(signal.reason ?? new DOMException("Aborted", "AbortError")); }, { once: true });
+  });
 }
