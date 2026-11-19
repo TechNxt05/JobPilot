@@ -189,6 +189,21 @@ describe("contacts", () => {
   it("builds a signature from real profile links and a Gmail compose URL", () => {
     const sig = emailSignature({ ...EMPTY_PROFILE, firstName: "Asha", lastName: "K", github: "https://github.com/asha", email: "a@x.com" });
     expect(sig).toBe("Best regards,\nAsha K\na@x.com\nGitHub: https://github.com/asha");
+    const p = {
+      ...EMPTY_PROFILE, firstName: "Asha", lastName: "K", email: "a@x.com", phone: "+91 98765 43210",
+      linkedin: "https://linkedin.com/in/asha", github: "https://github.com/asha", portfolio: "https://asha.dev",
+      projects: [
+        { name: "JobPilot – AI job copilot", link: "https://github.com/asha/jobpilot", tech: "", description: "" },
+        { name: "PitchDeck", link: "https://pitch.asha.dev", tech: "", description: "" },
+        { name: "NoLink", link: "", tech: "", description: "" },
+      ],
+    };
+    // Only projects the email names, with real links, go on top; then name, phone, email and every profile link
+    expect(emailSignature(p, "I built JobPilot, which tailors resumes. NoLink was a class project.")).toBe(
+      "Project links:\nJobPilot: https://github.com/asha/jobpilot\n\nBest regards,\nAsha K\n+91 98765 43210\na@x.com\n" +
+      "LinkedIn: https://linkedin.com/in/asha\nGitHub: https://github.com/asha\nPortfolio: https://asha.dev",
+    );
+    expect(emailSignature(p, "Nothing named here.")).not.toContain("Project links");
     const url = new URL(gmailComposeUrl("hr@x.com", "Hi there", "Line 1\nLine 2"));
     expect(url.searchParams.get("to")).toBe("hr@x.com");
     expect(url.searchParams.get("body")).toBe("Line 1\nLine 2");

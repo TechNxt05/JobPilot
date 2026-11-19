@@ -169,6 +169,44 @@ export const DEFAULT_SOURCES: JobSource[] = [
   { ats: "greenhouse", slug: "cloudbeds", company: "Cloudbeds" },
   { ats: "ashby", slug: "clickhouse", company: "ClickHouse" },
   { ats: "ashby", slug: "circle", company: "Circle (circle.so)" },
+  // AI for small businesses (boards checked Nov 2026; Tandem Health and Archy are above). Not readable here:
+  // Arbio, Jota.ai, Adfin, Redo, Trengo, Lindy, Sensi.AI, GlossGenius, Newo.ai, Constrafor; Digs has an empty board.
+  // Note greenhouse "warp" is Warp the terminal; Warp (payroll) is ashby "warp". Ashby "adaptive" is Adaptive (construction).
+  { ats: "ashby", slug: "flai", company: "Flai" },
+  { ats: "ashby", slug: "broccoli", company: "Broccoli AI" },
+  { ats: "ashby", slug: "bobyard", company: "Bobyard" },
+  { ats: "ashby", slug: "netic", company: "Netic" },
+  { ats: "ashby", slug: "artisan", company: "Artisan" },
+  { ats: "lever", slug: "nitra", company: "Nitra" },
+  { ats: "ashby", slug: "owner", company: "Owner" },
+  { ats: "ashby", slug: "probook", company: "Probook" },
+  { ats: "ashby", slug: "warp", company: "Warp (payroll)" },
+  { ats: "ashby", slug: "avoca", company: "Avoca" },
+  { ats: "ashby", slug: "ambrook", company: "Ambrook" },
+  { ats: "ashby", slug: "assorthealth", company: "Assort Health" },
+  { ats: "ashby", slug: "valeriehealth", company: "Valerie Health" },
+  { ats: "greenhouse", slug: "fronterahealth", company: "Frontera" },
+  { ats: "ashby", slug: "adaptive", company: "Adaptive" },
+  { ats: "ashby", slug: "nory", company: "Nory" },
+  { ats: "smartrecruiters", slug: "partly", company: "Partly" },
+  // Conversational AI (boards checked Nov 2026). Not readable here: Leena AI, Omilia, Wati, ConnexAI, Hyro, Front,
+  // Talkdesk, Genesys, Pylon (ashby "pylon" is an unrelated mortgage company).
+  { ats: "ashby", slug: "happyrobot.ai", company: "HappyRobot" },
+  { ats: "ashby", slug: "sierra", company: "Sierra" },
+  { ats: "ashby", slug: "decagon", company: "Decagon" },
+  { ats: "ashby", slug: "parloa", company: "Parloa" },
+  { ats: "greenhouse", slug: "himarley", company: "Hi Marley" },
+  { ats: "ashby", slug: "eliseai", company: "EliseAI" },
+  { ats: "lever", slug: "netomi", company: "Netomi" },
+  { ats: "greenhouse", slug: "observeai", company: "Observe.AI" },
+  { ats: "ashby", slug: "vapi", company: "Vapi" },
+  { ats: "greenhouse", slug: "podium81", company: "Podium" },
+  { ats: "greenhouse", slug: "symphony", company: "Symphony" },
+  { ats: "ashby", slug: "iterable", company: "Iterable" },
+  // Indian product companies from an off-campus portal list (Nov 2026). The rest of that list (TCS, Infosys, Wipro,
+  // HCLTech, Tech Mahindra, LTIMindtree, Persistent, Mphasis, Coforge, Hexaware, Birlasoft, KPIT, Zensar, LTTS,
+  // Tata Elxsi, Zoho, Postman, BrowserStack, Chargebee, Juspay, Delhivery) use Workday, Oracle, SuccessFactors or own pages.
+  { ats: "smartrecruiters", slug: "freshworks", company: "Freshworks" },
 ];
 
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;

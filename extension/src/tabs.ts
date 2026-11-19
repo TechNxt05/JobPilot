@@ -27,7 +27,7 @@ export async function runInPage<R>(func: () => R): Promise<R | undefined> {
 }
 
 /** Run in every frame we may access (application forms are often embedded iframes). */
-export async function runInAllFrames<R>(func: () => R): Promise<{ frameId: number; result: R }[]> {
+export async function runInAllFrames<R>(func: () => R | Promise<R>): Promise<{ frameId: number; result: R }[]> {
   const tabId = await activeTabId();
   try {
     const res = await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func });
@@ -37,7 +37,7 @@ export async function runInAllFrames<R>(func: () => R): Promise<{ frameId: numbe
   }
 }
 
-export async function runInFrame<A, R>(frameId: number, func: (arg: A) => R, arg: A): Promise<R | undefined> {
+export async function runInFrame<A, R>(frameId: number, func: (arg: A) => R | Promise<R>, arg: A): Promise<R | undefined> {
   const tabId = await activeTabId();
   const [res] = await chrome.scripting.executeScript({ target: { tabId, frameIds: [frameId] }, func, args: [arg] });
   return res?.result as R | undefined;

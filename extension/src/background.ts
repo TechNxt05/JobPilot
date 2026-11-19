@@ -2,8 +2,11 @@ import {
   analyzeJob,
   complete,
   draftAnswers,
+  emailSignature,
   EMPTY_PROFILE,
+  generateColdEmail,
   generateCoverLetter,
+  pickResumeForJob,
   parseResumeWithAI,
   profileToContext,
   PROVIDERS,
@@ -65,6 +68,15 @@ async function handle(msg: Request) {
       const { profile, resumeText } = await profileAndResume(msg.resumeId);
       return runAI("cover-letter", { job: msg.job, profile, resumeText, tone: msg.tone, words: msg.words },
         (ai) => generateCoverLetter(ai, { profile, resumeText, job: msg.job, tone: msg.tone, words: msg.words }));
+    }
+    case "cold-email": {
+      // The resume that best fits the job, so the email cites the right projects
+      const resumes = await getResumes();
+      const best = msg.resumeId ? resumes.find((r) => r.id === msg.resumeId) : pickResumeForJob(resumes, msg.job ? { title: msg.job.title ?? "", text: msg.job.text } : null);
+      const { profile, resumeText } = await profileAndResume(best?.id);
+      const email = await runAI<{ subject: string; body: string; warnings: string[] }>("cold-email", { job: msg.job, contact: msg.contact, profile, resumeText },
+        (ai) => generateColdEmail(ai, { profile, resumeText, contact: msg.contact, job: msg.job }));
+      return { ...email, signature: emailSignature(profile, email.body) };
     }
     case "tailor-resume": {
       const { profile, resumeText } = await profileAndResume(msg.resumeId);

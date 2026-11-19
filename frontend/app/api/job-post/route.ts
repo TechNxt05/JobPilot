@@ -79,7 +79,7 @@ export async function POST(req: Request) {
       contacts,
       ats,
       replies,
-      signature: emailSignature(profile),
+      signature: emailSignature(profile, replies.emailBody),
       // Short LinkedIn sign-off: name + one link
       dmSignoff: [[profile.firstName, profile.lastName].filter(Boolean).join(" "), profile.portfolio || profile.github].filter(Boolean).join("\n"),
     }, 200, headers);

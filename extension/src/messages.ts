@@ -1,4 +1,4 @@
-import type { CoverLetterTone, DraftQuestion, JobAnalysis, JobPosting } from "@internova/core";
+import type { Contact, CoverLetterTone, DraftQuestion, JobAnalysis, JobPosting } from "@internova/core";
 
 /** Side panel → service worker. The API key never leaves the service worker. */
 export type Request =
@@ -8,6 +8,7 @@ export type Request =
   | { type: "draft-answers"; questions: DraftQuestion[]; job: JobPosting | null; answers?: { question: string; answer: string }[] }
   | { type: "parse-resume"; resumeId: string }
   | { type: "cover-letter"; job: Pick<JobPosting, "title" | "company" | "text">; resumeId?: string | null; tone?: CoverLetterTone; words?: number }
+  | { type: "cold-email"; job: Pick<JobPosting, "title" | "url" | "text"> | null; contact: Pick<Contact, "name" | "company" | "title" | "department">; resumeId?: string | null }
   | { type: "tailor-resume"; job: Pick<JobPosting, "title" | "company" | "text">; resumeId?: string | null; latex?: string; shorten?: boolean; addSkills?: string[] };
 
 export type Response<T> = { ok: true; data: T } | { ok: false; error: string };

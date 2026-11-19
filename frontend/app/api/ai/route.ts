@@ -3,6 +3,7 @@ import {
   cleanDraftAnswers,
   cleanDraftQuestions,
   draftAnswers,
+  generateColdEmail,
   generateCoverLetter,
   normalizeProfile,
   parseResumeWithAI,
@@ -28,6 +29,7 @@ export const maxDuration = 120;
  * POST { task: "parse-resume", text }
  * POST { task: "cover-letter", job, profile, resumeText, tone?, words? }
  * POST { task: "tailor-resume", job, profile, resumeText, latex?, shorten? }
+ * POST { task: "cold-email", job?, contact: { name, company, title, department }, profile, resumeText }
  */
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
@@ -67,6 +69,14 @@ export async function POST(req: Request) {
         const questions = cleanDraftQuestions(body.questions);
         const ctxJob = job.text.length >= 80 ? job : null;
         return json(await draftAnswers(ai, questions, { profile: profileToContext(profile, resumeText), job: ctxJob, answers: cleanDraftAnswers(body.answers) }), 200, headers);
+      }
+      case "cold-email": {
+        const c = (body.contact ?? {}) as Record<string, unknown>;
+        const contact = { name: str(c.name, 200), company: str(c.company, 200), title: str(c.title, 200), department: str(c.department, 200) };
+        if (!contact.company) return json({ error: "The contact's company is missing." }, 400);
+        if (!profile.firstName && !resumeText) return json({ error: "Upload a resume or fill in your Profile first. The email is written from it." }, 400);
+        const coldJob = job.text.length >= 80 ? { title: job.title, url: job.url, text: job.text } : null;
+        return json(await generateColdEmail(ai, { profile, resumeText, contact, job: coldJob }), 200, headers);
       }
       case "parse-resume": {
         const text = str(body.text, 20000);

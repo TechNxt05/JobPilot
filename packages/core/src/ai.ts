@@ -159,8 +159,11 @@ const DRAFT_PROMPT = `You draft answers to job application questions for a candi
 Rules:
 - Use ONLY facts in the CANDIDATE PROFILE (which includes their resume, additional information and their own answers),
   plus the job posting for facts about the company/role.
-- Never invent experience, skills, tools, models, metrics, employers, dates, links or achievements. If the profile doesn't
-  support an answer, write what it does support and add a short [bracketed note] for the candidate to fill in.
+- Never invent experience, skills, tools, models, metrics, employers, dates, links or achievements.
+- Write exactly what the candidate would type into the form, in their own natural voice. Never talk about the profile
+  or resume ("my profile doesn't mention…", "not specified"), and never add [brackets], placeholders, notes or
+  instructions for the candidate. If the profile answers only part of a question, answer that part naturally and leave
+  the rest out; if it can't answer the question at all, return "".
 - Never answer eligibility, legal, visa, salary, availability, relocation or demographic questions; return "" for those.
 - First person, specific, plain language, no clichés or flattery. Respect any word or character limit in the question;
   otherwise keep each answer under 150 words. Yes/no questions start with "Yes" or "No" when the profile makes it clear.
@@ -169,6 +172,7 @@ Rules:
   projects, their tech, experience bullets, education, additional information and the candidate's earlier answers.
 - When the question is close to one of the CANDIDATE'S EARLIER ANSWERS, reuse that answer, adapted to the new wording.
 - OPTIONS given: answer with exactly one option text, copied verbatim, that the profile supports; "" if it doesn't say.
+- PICK ALL THAT APPLY: answer with every option the profile supports, each copied verbatim, one per line; "" if none.
 - SHORT field: a short value only (a number, a few words or a comma-separated list), no sentences.
 - Counting questions ("years of experience with X"): count from the dates in the profile; if they don't say, return "".
 
@@ -181,6 +185,8 @@ export interface DraftQuestion {
   options?: string[];
   /** "short" for one-line inputs (a value, not a paragraph) */
   kind?: "short" | "long";
+  /** Checkbox group: several options may apply */
+  multi?: boolean;
 }
 
 export interface DraftContext {
@@ -193,7 +199,7 @@ export interface DraftContext {
 
 const questionLine = (q: DraftQuestion) => {
   const opts = q.options?.filter((o) => o.trim() && !/^(select|choose|please|--)/i.test(o.trim())).slice(0, 40);
-  return `- id "${q.id}"${q.kind === "short" ? " (SHORT field)" : ""}: ${q.question}${opts?.length ? `\n  OPTIONS: ${opts.map((o) => JSON.stringify(o)).join(" | ")}` : ""}`;
+  return `- id "${q.id}"${q.kind === "short" ? " (SHORT field)" : ""}: ${q.question}${opts?.length ? `\n  ${q.multi ? "PICK ALL THAT APPLY from" : "OPTIONS"}: ${opts.map((o) => JSON.stringify(o)).join(" | ")}` : ""}`;
 };
 
 const strArr = (v: unknown, n: number, max: number) =>
@@ -209,6 +215,7 @@ export function cleanDraftQuestions(raw: unknown): DraftQuestion[] {
       question: String(q.question).slice(0, 1000),
       ...(Array.isArray(q.options) ? { options: strArr(q.options, 60, 200) } : {}),
       ...(q.kind === "short" || q.kind === "long" ? { kind: q.kind } : {}),
+      ...(q.multi === true ? { multi: true } : {}),
     }));
 }
 
@@ -244,8 +251,37 @@ export async function draftAnswers(
   });
   const ids = new Set(questions.map((q) => q.id));
   const out: Record<string, string> = {};
-  for (const a of answers) if (ids.has(a.id) && a.answer.trim()) out[a.id] = a.answer.trim();
+  for (const a of answers) {
+    const answer = naturalAnswer(a.answer);
+    if (ids.has(a.id) && answer) out[a.id] = answer;
+  }
   return out;
+}
+
+/** A sentence that talks about the candidate's data instead of answering ("The profile does not specify…"). */
+const META_SENTENCE = new RegExp(
+  [
+    // "The profile does not specify…", "My resume doesn't mention…", "the information provided doesn't include…"
+    String.raw`\b(the|my|your|candidate's|this)\s+(profile|resume|résumé|cv|information|details)\b[^.!?]*(\bnot|n't|\bno)\s+(\w+\s+)?(mention|specif|state|include|list|say|indicate|provid|show|contain|cover|detail)`,
+    String.raw`\bno\s+(mention|information|details?|data)\s+(of|about|on|regarding)\b`,
+    String.raw`\b(not|isn't|aren't)\s+(specified|mentioned|stated|provided|listed|available|indicated|included)\b`,
+    String.raw`\bplease\s+(indicate|specify|add|fill|provide|insert|enter|confirm|update)\b`,
+    String.raw`\b(to be (filled|added|confirmed)|fill in|tbd|placeholder)\b`,
+  ].join("|"),
+  "i",
+);
+
+/**
+ * Drop what a form answer shouldn't contain: [bracketed notes], placeholders and sentences about the profile
+ * itself. Returns "" when nothing real is left (the field then stays for the candidate).
+ */
+export function naturalAnswer(text: string): string {
+  const noBrackets = text.replace(/\[[^\]]*\]|\{[^}]*\}|<[^>]*>/g, " ");
+  const kept = noBrackets
+    .split("\n")
+    .map((line) => (line.match(/[^.!?]+[.!?]*\s*/g) ?? []).filter((s) => !META_SENTENCE.test(s)).join("").trim())
+    .join("\n");
+  return kept.replace(/[ \t]+/g, " ").replace(/ ([,.;:!?])/g, "$1").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 /** Single-question convenience wrapper. */

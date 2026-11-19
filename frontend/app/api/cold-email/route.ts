@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     if (contact.outreach === "none") {
       await supabase.from("contacts").update({ outreach: "drafted", updated_at: new Date().toISOString() }).eq("id", contact.id);
     }
-    return json({ ...email, signature: emailSignature(profile), to: contact.email }, 200, headers);
+    return json({ ...email, signature: emailSignature(profile, email.body), to: contact.email }, 200, headers);
   } catch (e) {
     return json({ error: (e as Error).message }, 502, headers);
   }

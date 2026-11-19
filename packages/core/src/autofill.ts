@@ -13,7 +13,11 @@ export interface FormField {
   iid: string;
   frameId: number;
   tag: "input" | "select" | "textarea";
-  /** input type, "select", "textarea", or "radio"/"checkbox" for grouped choices */
+  /**
+   * input type, "select", "textarea", "radio" (one choice: native radios, ARIA radios, Yes/No buttons),
+   * "checkbox" (several choices; a lone checkbox has options Yes / No), or "combobox" (custom dropdown, tag "select";
+   * no options when they only load as you type)
+   */
   type: string;
   label: string;
   name: string;
@@ -181,17 +185,83 @@ const DEGREE_LEVEL_WORDS: [RegExp, RegExp][] = [
   [/ph\.?\s?d|doctor/i, /ph\.?\s?d|doctor/i],
 ];
 
+/** Same place, different names: "India" / "IN" / "Bharat", "USA" / "United States of America". */
+const ALIASES: string[][] = [
+  ["india", "in", "ind", "bharat"],
+  ["united states", "united states of america", "usa", "us", "u s", "u s a", "america"],
+  ["united kingdom", "uk", "u k", "gb", "great britain", "britain", "england"],
+  ["united arab emirates", "uae", "u a e"],
+  ["germany", "de", "deutschland"],
+  ["netherlands", "nl", "holland", "the netherlands"],
+  ["south korea", "korea", "republic of korea", "korea republic of"],
+  ["bengaluru", "bangalore"],
+  ["gurugram", "gurgaon"],
+  ["mumbai", "bombay"],
+  ["chennai", "madras"],
+  ["kolkata", "calcutta"],
+  ["new delhi", "delhi", "delhi ncr", "ncr"],
+];
+const aliasesOf = (v: string) => ALIASES.find((g) => g.includes(v)) ?? [v];
+
+/** Other names for a place, longest first ("Bengaluru" → ["bangalore"]), to try in search-as-you-type dropdowns. */
+export function valueAliases(value: string): string[] {
+  const v = normalize(value).replace(/['’`]/g, "");
+  return aliasesOf(v).filter((a) => a !== v && a.length > 3).sort((a, b) => b.length - a.length);
+}
+
+/** Option text without a bracketed code: "India (+91)" → "india", "Bachelor's (B.Tech)" → "bachelor's". */
+const withoutParens = (s: string) => normalize(s.replace(/\([^)]*\)|\[[^\]]*\]/g, " "));
+
+/** Numeric range an option describes: "1-3 years" → [1, 3], "5+ years" → [5, ∞], "Less than 1 year" → [0, 1). */
+function optionRange(o: string): [number, number, boolean] | null {
+  const t = o.toLowerCase().replace(/,/g, "");
+  const num = "(\\d+(?:\\.\\d+)?)";
+  let m = t.match(new RegExp(`${num}\\s*(?:-|–|—|to)\\s*${num}`));
+  if (m) return [Number(m[1]), Number(m[2]), true];
+  m = t.match(new RegExp(`(?:less\\s+than|under|below|fewer\\s+than|<)\\s*${num}`));
+  if (m) return [0, Number(m[1]), false];
+  m = t.match(new RegExp(`${num}\\s*\\+|(?:more\\s+than|over|above|at\\s+least|>)\\s*${num}|${num}\\s*(?:years?\\s+)?(?:or|and)\\s+(?:more|above|over)`));
+  if (m) return [Number(m[1] ?? m[2] ?? m[3]), Infinity, true];
+  m = t.match(new RegExp(`^\\s*${num}\\s*(?:years?|yrs?|months?)?\\s*$`));
+  if (m) return [Number(m[1]), Number(m[1]), true];
+  return null;
+}
+
+/** "2", "2 years", "2.5 yrs" → 2 / 2.5; null when the value isn't a plain amount. */
+function plainNumber(v: string): number | null {
+  const m = v.trim().match(/^(\d+(?:\.\d+)?)\s*(\+|years?|yrs?|y)?\s*$/i);
+  return m ? Number(m[1]) : null;
+}
+
+/** The option whose range holds the number: 2 → "1-3 years" (on a shared edge, "2-5" beats "1-2"). */
+function rangeOption(opts: string[], n: number): string | null {
+  const hits = opts.map((o) => [o, optionRange(o)] as const).filter(([, r]) => r && n >= r[0] && (r[2] ? n <= r[1] : n < r[1]));
+  if (!hits.length) return null;
+  return (hits.find(([, r]) => n < r![1]) ?? hits[0])[0];
+}
+
 /** Pick the select/radio option that best matches a value, or null if nothing is a confident match. */
 export function bestOption(options: string[], value: string, key?: FieldKey | null): string | null {
   const v = normalize(value);
   if (!v) return null;
-  const opts = options.filter((o) => o.trim() && !/^(select|choose|please|--|none selected)/i.test(o.trim()));
+  const opts = options.filter((o) => o.trim() && !/^(select|choose|please|--|none selected)\b/i.test(o.trim()));
   const exact = opts.find((o) => normalize(o) === v);
   if (exact) return exact;
+  // Apostrophes, accents and bracketed codes: "Bachelor’s" = "Bachelors", "India (+91)" = "India"
+  const loose = (s: string) => withoutParens(s).normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/['’`]/g, "");
+  const lv = loose(value);
+  const names = aliasesOf(lv);
+  const aliased = opts.filter((o) => names.includes(loose(o)));
+  if (aliased.length === 1) return aliased[0];
+  const n = plainNumber(value);
+  if (n !== null) {
+    const ranged = rangeOption(opts, n);
+    if (ranged) return ranged;
+  }
   // "Yes, available from May" → the option starting with Yes
   const yn = v.match(/^(yes|no)\b/);
   if (yn) {
-    const hit = opts.filter((o) => normalize(o).split(" ")[0] === yn[1]);
+    const hit = opts.filter((o) => normalize(o).split(/[^a-z0-9]+/)[0] === yn[1]);
     if (hit.length === 1) return hit[0];
   }
   if (key === "degree") {
@@ -201,11 +271,18 @@ export function bestOption(options: string[], value: string, key?: FieldKey | nu
       if (hit) return hit;
     }
   }
+  // Whole words only, so "India" doesn't match "British Indian Ocean Territory"
+  const words = (s: string) => ` ${loose(s)} `;
   const contains = opts.filter((o) => {
-    const n = normalize(o);
-    return n.length >= 3 && (n.includes(v) || v.includes(n));
+    const on = loose(o);
+    return on.length >= 3 && lv.length >= 2 && (words(o).includes(` ${lv} `) || words(value).includes(` ${on} `));
   });
   if (contains.length === 1) return contains[0];
+  // Several contain it ("India", "India - Remote"): the shortest one, when it is the value itself plus little else
+  if (contains.length > 1) {
+    const shortest = [...contains].sort((a, b) => a.length - b.length)[0];
+    if (loose(shortest) === lv) return shortest;
+  }
   const vt = new Set(v.split(" "));
   let best: string | null = null;
   let bestScore = 0;
@@ -249,9 +326,41 @@ function profileValue(key: FieldKey, p: FlatProfile): string {
   return p[key] ?? "";
 }
 
-/** Fit an answer to a select / radio field, or keep it as free text. */
-function fitToField(field: FormField, value: string): string | null {
-  if (field.tag === "select" || field.type === "radio") return bestOption(field.options, value);
+/** Separator between the picked options of a checkbox group in a plan's value. */
+export const MULTI_SEP = "\n";
+
+/** A group of checkboxes where several options can be ticked (a lone checkbox is a Yes / No choice). */
+export const isMultiChoice = (f: Pick<FormField, "type" | "options">) => f.type === "checkbox" && !isYesNo(f.options);
+const isYesNo = (options: string[]) => options.length === 2 && options[0] === "Yes" && options[1] === "No";
+
+/** A dropdown whose options only appear as you type (location, school): any value can be typed and matched there. */
+export const isTypeahead = (f: Pick<FormField, "type" | "options">) => f.type === "combobox" && f.options.length === 0;
+
+/** A field answered by picking from options (dropdown, radio group, checkboxes). */
+export const isChoiceField = (f: Pick<FormField, "tag" | "type">) => f.tag === "select" || f.type === "radio" || f.type === "checkbox";
+
+/**
+ * Options of a checkbox group that an answer names ("Python, SQL" / one per line), in the form's order;
+ * MULTI_SEP-joined, or null when none match.
+ */
+export function bestOptions(options: string[], value: string): string | null {
+  const parts = value.split(/\n|;|,|\band\b/i).map((s) => s.trim()).filter(Boolean);
+  const picked = new Set<string>();
+  for (const p of parts) {
+    const o = bestOption(options, p);
+    if (o) picked.add(o);
+  }
+  // Options that themselves contain commas ("Yes, full time") still match as a whole
+  const whole = bestOption(options, value);
+  if (whole && !picked.size) picked.add(whole);
+  return picked.size ? options.filter((o) => picked.has(o)).join(MULTI_SEP) : null;
+}
+
+/** Fit an answer to a choice field (option text, or MULTI_SEP-joined options), or keep it as free text. */
+export function fitToField(field: FormField, value: string): string | null {
+  if (isTypeahead(field)) return value.trim() || null;
+  if (isMultiChoice(field)) return bestOptions(field.options, value);
+  if (isChoiceField(field)) return bestOption(field.options, value);
   return value;
 }
 
@@ -306,10 +415,21 @@ export function planAutofill(fields: FormField[], profile: CandidateProfile, lib
       return { ...base, action: "ask", reason: "sensitive", note: `${c.sensitive}: answer this yourself` };
     }
     if (field.type === "radio" || field.type === "checkbox") {
-      // A single-choice question we have no rule for: AI can pick the option the profile supports
-      const draftable = field.type === "radio" && hasMeaningfulLabel(field) && field.options.length > 1;
+      // A profile detail asked as options ("Degree: B.Tech / M.Tech", "Country: India / Other")
+      const own = c.key ? profileValue(c.key, flat) : "";
+      const fitted = own ? fitToField(field, own) : null;
+      if (c.key && fitted) {
+        const differs = !!field.currentValue && field.currentValue.trim() !== fitted.trim();
+        return { ...base, key: c.key, action: "fill", reason: null, value: fitted, source: "profile", selected: !differs,
+          note: differs ? `Already has “${field.currentValue.slice(0, 40)}”; tick to overwrite` : "" };
+      }
+      // A choice question we have no rule for: AI can pick the option(s) the profile supports
+      const draftable = hasMeaningfulLabel(field) && field.options.length > 1;
+      const many = isMultiChoice(field);
       return { ...base, key: c.key, action: "ask", reason: "choice", aiDraftable: draftable,
-        note: draftable ? "Choice question: pick an option, or let AI choose from your profile" : "Choice field: pick the option yourself" };
+        note: draftable
+          ? many ? "Tick all that apply, or let AI choose from your profile" : "Choice question: pick an option, or let AI choose from your profile"
+          : "Choice field: pick the option yourself" };
     }
     if (c.openQuestion) {
       const saved = matchSavedAnswer(field.label, library);
@@ -344,6 +464,11 @@ export function planAutofill(fields: FormField[], profile: CandidateProfile, lib
     }
     if (c.key === "graduationYear" && ["date", "month"].includes(field.type)) {
       return { ...base, key: c.key, action: "ask", reason: "format", note: "Needs a full date; pick it yourself" };
+    }
+    if (isTypeahead(field)) {
+      const differs = !!field.currentValue && field.currentValue.trim().toLowerCase() !== value.trim().toLowerCase();
+      return { ...base, key: c.key, action: "fill", reason: null, value, source: "profile", selected: !differs,
+        note: differs ? `Already has “${field.currentValue.slice(0, 40)}”; tick to overwrite` : "Typed into the search box; JobPilot picks the matching suggestion" };
     }
     if (field.tag === "select") {
       const opt = bestOption(field.options, value, c.key);

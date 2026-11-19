@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  bestOption,
   EMPTY_PROFILE,
+  fitToField,
+  isChoiceField,
+  isMultiChoice,
+  isTypeahead,
+  MULTI_SEP,
+  valueAliases,
   getCommonQuestion,
   pickResumeForJob,
   planAutofill,
@@ -33,7 +38,8 @@ const rowKey = (r: { field: FormField }) => `${r.field.frameId}:${r.field.iid}`;
 const isLocked = (r: Row) =>
   (r.reason === "sensitive" && !r.questionId) || r.reason === "file" || r.reason === "format" || (r.reason === "choice" && !r.questionId && !r.aiDraftable);
 
-const isChoice = (f: FormField) => f.tag === "select" || f.type === "radio";
+/** Picked from a fixed list of options (a typeahead dropdown takes any typed value). */
+const isChoice = (f: FormField) => isChoiceField(f) && !isTypeahead(f);
 
 /** What the AI is told about a field: its options, and whether it wants a value or a paragraph. */
 function draftQuestion(r: Row): DraftQuestion {
@@ -42,7 +48,8 @@ function draftQuestion(r: Row): DraftQuestion {
     id: rowKey(r),
     question: r.field.label || r.field.placeholder || r.field.name,
     ...(isChoice(r.field) ? { options: r.field.options } : {}),
-    kind: r.field.tag === "textarea" ? "long" : short || isChoice(r.field) ? "short" : undefined,
+    ...(isMultiChoice(r.field) ? { multi: true } : {}),
+    kind: r.field.tag === "textarea" ? "long" : short || isChoiceField(r.field) ? "short" : undefined,
   };
 }
 
@@ -107,10 +114,10 @@ export function AutofillView({ resumes, keySet, goTo, active, pageScan }: Props)
         if (!res.ok) return { ...r, note: `AI draft failed: ${res.error}` };
         const raw = res.data[rowKey(r)];
         if (!raw) return { ...r, note: "AI couldn't answer this from your profile. Write it yourself or add details in Additional information" };
-        const answer = isChoice(r.field) ? bestOption(r.field.options, raw) : raw;
+        const answer = fitToField(r.field, raw);
         if (!answer) return { ...r, note: `AI suggested “${raw.slice(0, 60)}”, which isn't one of the options. Pick one yourself` };
         return { ...r, value: answer, selected: true, source: "ai" as const,
-          note: isChoice(r.field) ? "Chosen by AI from your profile. Check it" : "Drafted from your profile. Edit it so it sounds like you" };
+          note: isChoiceField(r.field) ? "Chosen by AI from your profile. Check it" : "Drafted from your profile. Edit it so it sounds like you" };
       }) ?? null,
     );
   }
@@ -205,7 +212,10 @@ export function AutofillView({ resumes, keySet, goTo, active, pageScan }: Props)
     if (!rows) return;
     setBusy(true);
     const byFrame = new Map<number, FillItem[]>();
-    for (const r of toFill) byFrame.set(r.field.frameId, [...(byFrame.get(r.field.frameId) ?? []), { iid: r.field.iid, value: r.value }]);
+    for (const r of toFill) {
+      const item: FillItem = { iid: r.field.iid, value: r.value, ...(r.field.type === "combobox" ? { alts: valueAliases(r.value) } : {}) };
+      byFrame.set(r.field.frameId, [...(byFrame.get(r.field.frameId) ?? []), item]);
+    }
     const results: FillResult[] = [];
     for (const [frameId, items] of byFrame) {
       try {
@@ -410,12 +420,8 @@ function SourceChip({ row }: { row: Row }) {
 /** Input that matches the form control: dropdown for selects and radio groups, textarea for questions. */
 function ValueInput({ row, onChange, withCheckbox, multiline }: { row: Row; onChange: (p: Partial<Row>) => void; withCheckbox?: boolean; multiline?: boolean }) {
   const set = (value: string) => onChange({ value, selected: !!value.trim() });
-  const choice = row.field.tag === "select" || row.field.type === "radio";
-  const control = choice ? (
-    <select value={row.field.options.includes(row.value) ? row.value : ""} onChange={(e) => set(e.target.value)}>
-      <option value="">Choose…</option>
-      {row.field.options.filter(Boolean).map((o) => <option key={o} value={o}>{o}</option>)}
-    </select>
+  const control = isChoiceField(row.field) ? (
+    <ChoiceControl row={row} onValue={set} />
   ) : multiline ? (
     <textarea rows={5} value={row.value} placeholder="Write your answer" onChange={(e) => set(e.target.value)} />
   ) : (
@@ -430,6 +436,39 @@ function ValueInput({ row, onChange, withCheckbox, multiline }: { row: Row; onCh
   );
 }
 
+/** Dropdown for one choice, tick boxes for "all that apply", a search box for dropdowns that load as you type. */
+function ChoiceControl({ row, onValue }: { row: Row; onValue: (v: string) => void }) {
+  const options = row.field.options.filter(Boolean);
+  if (isTypeahead(row.field)) {
+    return <input value={row.value} placeholder="Type what to search for in this dropdown" onChange={(e) => onValue(e.target.value)} />;
+  }
+  if (isMultiChoice(row.field)) {
+    const picked = new Set(row.value.split(MULTI_SEP).filter(Boolean));
+    const toggle = (o: string) => {
+      const next = new Set(picked);
+      if (next.has(o)) next.delete(o);
+      else next.add(o);
+      onValue(options.filter((x) => next.has(x)).join(MULTI_SEP));
+    };
+    return (
+      <div className="choice-list">
+        {options.map((o) => (
+          <label key={o} className="check small">
+            <input type="checkbox" checked={picked.has(o)} onChange={() => toggle(o)} />
+            {o}
+          </label>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <select value={options.includes(row.value) ? row.value : ""} onChange={(e) => onValue(e.target.value)}>
+      <option value="">Choose…</option>
+      {options.map((o) => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+}
+
 function FieldRow({ row, onChange }: { row: Row; onChange: (p: Partial<Row>) => void }) {
   return (
     <div className="field-row">
@@ -438,10 +477,8 @@ function FieldRow({ row, onChange }: { row: Row; onChange: (p: Partial<Row>) => 
         <span className="field-label">{row.field.label || row.field.name}</span>
         {row.field.frameId !== 0 && <span className="muted small">· embedded form</span>}
       </label>
-      {row.field.tag === "select" ? (
-        <select value={row.value} onChange={(e) => onChange({ value: e.target.value })}>
-          {row.field.options.filter(Boolean).map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
+      {isChoiceField(row.field) ? (
+        <ChoiceControl row={row} onValue={(value) => onChange({ value })} />
       ) : (
         <input value={row.value} onChange={(e) => onChange({ value: e.target.value })} />
       )}
