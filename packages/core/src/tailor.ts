@@ -6,7 +6,7 @@ import { escapeLatex, escapeUrl, latexPreamble, latexToText } from "./latex";
 import { profileToContext, type CandidateProfile } from "./profile";
 import { completeParsed, looseArray, looseStrings, looseText, parseJSONLoose, ProviderError, type AIConfig, type CompleteOptions } from "./providers";
 import { analyzeResume } from "./resume";
-import { canonicalSkill, findSkills, skillCategory, type SkillCategory } from "./skills";
+import { canonicalSkill, findSkills, skillCategory, skillPatterns, type SkillCategory } from "./skills";
 
 /* ------------------------------ Grounding checks ------------------------------ */
 
@@ -334,15 +334,52 @@ const toAdd = (skills: string[] = []) =>
  * Skills the job asks for that a resume doesn't show. `inProfile` = the candidate's profile (skills list, projects,
  * experience) already has it, so it's safe to add; otherwise only the candidate can say whether they have it.
  */
-export function missingJobSkills(jobText: string, resumeText: string, profile?: CandidateProfile | null): { skill: string; inProfile: boolean }[] {
+export function missingJobSkills(
+  jobText: string,
+  resumeText: string,
+  profile?: CandidateProfile | null,
+  /** Skills the job analysis extracted (AI or rules), so this list matches the Analyze breakdown */
+  jobSkills: string[] = [],
+): { skill: string; inProfile: boolean }[] {
   const onResume = findSkills(resumeText);
   const resumeLower = resumeText.toLowerCase();
-  const prof = profile ? findSkills(profileToContext(profile)) : new Map();
+  return markInProfile(
+    jobSkillList(jobText, jobSkills).filter((k) => !onResume.has(k) && !resumeLower.includes(k.toLowerCase())),
+    profile,
+  );
+}
+
+/** Tag each skill with whether the candidate's profile already shows it; profile skills first. */
+export function markInProfile(skills: string[], profile?: CandidateProfile | null): { skill: string; inProfile: boolean }[] {
+  const profText = profile ? profileToContext(profile) : "";
+  const prof = profile ? findSkills(profText) : new Map();
   const listed = new Set((profile?.skills ?? []).map((x) => canonicalSkill(x).toLowerCase()));
-  return [...findSkills(jobText).keys()]
-    .filter((k) => !onResume.has(k) && !resumeLower.includes(k.toLowerCase()))
-    .map((skill) => ({ skill, inProfile: prof.has(skill) || listed.has(skill.toLowerCase()) }))
+  // Word-boundary match, so "Go" isn't found inside "Google"
+  const inText = (skill: string) => !!profText && skillPatterns(skill).some((p) => p.test(profText));
+  return dedupeSkills(skills)
+    .map((skill) => ({ skill, inProfile: prof.has(skill) || listed.has(skill.toLowerCase()) || inText(skill) }))
     .sort((a, b) => Number(b.inProfile) - Number(a.inProfile));
+}
+
+/**
+ * Every skill a job asks for, canonical names, no duplicates. The job analysis's list when there is one (so it matches
+ * the Analyze breakdown); dictionary hits in the posting otherwise.
+ */
+export function jobSkillList(jobText: string, jobSkills: string[] = []): string[] {
+  const fromAnalysis = dedupeSkills(jobSkills);
+  return fromAnalysis.length ? fromAnalysis : dedupeSkills([...findSkills(jobText).keys()]);
+}
+
+function dedupeSkills(skills: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of skills) {
+    const k = canonicalSkill(String(raw));
+    if (!k || k.length > 60 || seen.has(k.toLowerCase())) continue;
+    seen.add(k.toLowerCase());
+    out.push(k);
+  }
+  return out;
 }
 
 /** Add skills to a profile's Skills list (canonical names, no duplicates). Returns the same object when nothing changes. */

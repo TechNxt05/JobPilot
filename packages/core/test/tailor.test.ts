@@ -11,6 +11,7 @@ import {
   cleanJobTitle,
   titleLine,
   missingJobSkills,
+  markInProfile,
   addSkillsToProfile,
   generateCoverLetter,
   latexToText,
@@ -326,5 +327,18 @@ describe("approved skills (skill picker)", () => {
     const p = { ...profile, skills: ["React.js", "Python"] };
     expect(addSkillsToProfile(p, ["React", "Kubernetes", "kubernetes"]).skills).toEqual(["React.js", "Python", "Kubernetes"]);
     expect(addSkillsToProfile(p, ["python"])).toBe(p);
+  });
+
+  it("lists every skill the job analysis found as missing, not only dictionary skills", () => {
+    const jd = "We use Ruby and Ruby on Rails, plus Sidekiq and event sourcing.";
+    const list = missingJobSkills(jd, "Python, React", { ...profile, skills: ["Sidekiq"] }, ["Ruby", "Sidekiq", "Event sourcing", "Python"]);
+    const names = list.map((m) => m.skill);
+    // Exactly the analysis's list: nothing extra from the dictionary ("Ruby on Rails")
+    expect(names.sort()).toEqual(["Event sourcing", "Ruby", "Sidekiq"]);
+    expect(list.find((m) => m.skill === "Sidekiq")?.inProfile).toBe(true);
+    expect(new Set(names.map((n) => n.toLowerCase())).size).toBe(names.length);
+    // No analysis list: falls back to dictionary hits in the posting
+    expect(missingJobSkills(jd, "Python", profile).map((m) => m.skill)).toEqual(expect.arrayContaining(["Ruby", "Ruby on Rails"]));
+    expect(markInProfile(["Sidekiq", "Go"], { ...profile, skills: ["Sidekiq"] })).toEqual([{ skill: "Sidekiq", inProfile: true }, { skill: "Go", inProfile: false }]);
   });
 });

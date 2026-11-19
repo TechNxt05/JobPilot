@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import {
   addSkillsToProfile,
   compileLatex,
-  findSkills,
+  jobSkillList,
+  markInProfile,
   missingJobSkills,
   compileOnePage,
   coverLetterText,
@@ -57,7 +58,16 @@ function openInOverleaf(latex: string, name: string) {
 const compileErr = (e: unknown) => (e instanceof LatexError ? `${e.message}\n${latexLogErrors(e.log)}` : (e as Error).message);
 
 /** Cover letter + tailored resume for the analyzed job (uses the user's own AI keys). */
-export function ApplyKit({ job, resumeId, keySet, goTo }: { job: JobPosting; resumeId: string | null; keySet: boolean; goTo: (t: "settings") => void }) {
+export function ApplyKit({ job, jobSkills = [], missingSkills, resumeId, keySet, goTo }: {
+  job: JobPosting;
+  /** Skills the job analysis scraped from the posting (required + preferred) */
+  jobSkills?: string[];
+  /** The breakdown's missing skills for the selected resume: the picker lists exactly these */
+  missingSkills?: string[];
+  resumeId: string | null;
+  keySet: boolean;
+  goTo: (t: "settings") => void;
+}) {
   const jobInfo = { title: job.title, company: job.company, text: job.text };
   const slug = (job.company || "Job").replace(/\W+/g, "_");
 
@@ -105,15 +115,17 @@ export function ApplyKit({ job, resumeId, keySet, goTo }: { job: JobPosting; res
     (async () => {
       const [profile, resumes] = await Promise.all([getProfile(), getResumes()]);
       const resume = resumes.find((r) => r.id === resumeId) ?? resumes[resumes.length - 1];
-      const list = missingJobSkills(job.text, resume?.text ?? "", profile);
+      const list = missingSkills && jobSkills.length
+        ? markInProfile(missingSkills, profile)
+        : missingJobSkills(job.text, resume?.text ?? "", profile, jobSkills);
       if (!live) return;
       setMissing(list);
-      setJobSkillCount(findSkills(job.text).size);
+      setJobSkillCount(jobSkillList(job.text, jobSkills).length);
       setPicked(new Set(list.map((m) => m.skill))); // all ticked: untick what you don't want
       setSavedToProfile([]);
     })().catch(() => {});
     return () => { live = false; };
-  }, [job.text, resumeId]);
+  }, [job.text, resumeId, jobSkills.join("|"), (missingSkills ?? []).join("|")]);
 
   const toggle = (skill: string) =>
     setPicked((cur) => {
@@ -287,7 +299,7 @@ export function ApplyKit({ job, resumeId, keySet, goTo }: { job: JobPosting; res
             )}
             {(report.droppedSkills ?? []).length > 0 && <p className="small muted">Removed to keep it one page (this job doesn't ask for them): {report.droppedSkills.join(", ")}</p>}
             {savedToProfile.length > 0 && <p className="small good-text">Saved to your Profile: {savedToProfile.join(", ")}</p>}
-            {report.skillGaps.length > 0 && <p className="small"><span className="muted">Not added (unticked):</span> {report.skillGaps.join(", ")}</p>}
+            {missing.some((m) => !picked.has(m.skill)) && <p className="small"><span className="muted">Not added (unticked):</span> {missing.filter((m) => !picked.has(m.skill)).map((m) => m.skill).join(", ")}</p>}
             {report.repeatedVerbs.length > 0 && <p className="small muted">Repeated verbs: {report.repeatedVerbs.map((v) => `${v.verb} ×${v.count}`).join(", ")}</p>}
             <div className="row gap">
               {pdf && <button className="btn small primary" onClick={() => download(pdf.url, `Resume_${slug}.pdf`)}>Download PDF</button>}

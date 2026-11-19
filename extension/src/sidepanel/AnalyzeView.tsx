@@ -157,7 +157,11 @@ export function AnalyzeView({ resumes, keySet, goTo, onScanned }: Props) {
               <AIInsights analysis={analysis} aiBusy={aiBusy} keySet={keySet} goTo={goTo} />
               <ATSCard result={selected} />
               <VendorAtsCard job={analysis.job} resumeText={resumes.find((r) => r.id === selected.resumeId)?.text ?? ""} />
-              <ApplyKit job={analysis.job} resumeId={selected.resumeId} keySet={keySet} goTo={goTo} />
+              <ApplyKit
+                job={analysis.job}
+                jobSkills={[...analysis.requirements.requiredSkills, ...analysis.requirements.preferredSkills]}
+                missingSkills={selected.alignment.dimensions.filter((d) => d.id === "required_skills" || d.id === "preferred_skills").flatMap((d) => d.missing)}
+                resumeId={selected.resumeId} keySet={keySet} goTo={goTo} />
             </>
           ) : null}
         </>
