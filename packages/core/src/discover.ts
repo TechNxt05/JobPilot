@@ -1,13 +1,15 @@
 /**
- * Job discovery from public ATS job-board APIs (no scraping, no API keys).
- * Greenhouse, Lever, Ashby, SmartRecruiters, Workable and Recruitee publish every open role of a company
- * as JSON. Endpoints and field names follow https://github.com/Mersetti/ats-job-board-apis.
+ * Job discovery from public job-board APIs and public job pages (no logins, no API keys).
+ * Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee, Breezy, Workday, Oracle Recruiting, Eightfold,
+ * Amazon and Google Careers publish open roles as JSON or plain pages; other career sites and job aggregators are
+ * read through their sitemap and the JobPosting data on each job page. ATS endpoints follow
+ * https://github.com/Mersetti/ats-job-board-apis.
  *
  * Pure parsing is separate from fetching, so it is testable offline.
  */
 import { jobKey } from "./sync";
 
-export type AtsId = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "workable" | "recruitee";
+export type AtsId = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "workable" | "recruitee" | "workday" | "oracle" | "eightfold" | "breezy" | "google" | "amazon" | "sitemap";
 
 export const ATS_LABELS: Record<AtsId, string> = {
   greenhouse: "Greenhouse",
@@ -16,6 +18,13 @@ export const ATS_LABELS: Record<AtsId, string> = {
   smartrecruiters: "SmartRecruiters",
   workable: "Workable",
   recruitee: "Recruitee",
+  workday: "Workday",
+  oracle: "Oracle Recruiting",
+  eightfold: "Eightfold",
+  breezy: "Breezy",
+  google: "Google Careers",
+  amazon: "Amazon Jobs",
+  sitemap: "Careers site",
 };
 
 export interface JobSource {
@@ -207,9 +216,69 @@ export const DEFAULT_SOURCES: JobSource[] = [
   // HCLTech, Tech Mahindra, LTIMindtree, Persistent, Mphasis, Coforge, Hexaware, Birlasoft, KPIT, Zensar, LTTS,
   // Tata Elxsi, Zoho, Postman, BrowserStack, Chargebee, Juspay, Delhivery) use Workday, Oracle, SuccessFactors or own pages.
   { ats: "smartrecruiters", slug: "freshworks", company: "Freshworks" },
+  // Big employers on their own systems (checked live Nov 2026)
+  { ats: "google", slug: "google", company: "Google" },
+  { ats: "amazon", slug: "amazon", company: "Amazon" },
+  { ats: "eightfold", slug: "apply.careers.microsoft.com/microsoft.com", company: "Microsoft" },
+  { ats: "eightfold", slug: "paypal/paypal.com", company: "PayPal" },
+  { ats: "oracle", slug: "eeho.fa.us2.oraclecloud.com/CX_45001", company: "Oracle" },
+  { ats: "oracle", slug: "fa-etqo-saasfaprod1.fa.ocs.oraclecloud.com/CX_1", company: "Hexaware" },
+  { ats: "workday", slug: "nvidia.wd5/NVIDIAExternalCareerSite", company: "NVIDIA" },
+  { ats: "breezy", slug: "accrete-ai", company: "Accrete AI" },
+  { ats: "ashby", slug: "hopper", company: "Hopper" },
+  { ats: "ashby", slug: "parspec", company: "Parspec" },
+  { ats: "ashby", slug: "handshake", company: "Handshake" },
+  // Career sites and fresher-job aggregators read through their sitemaps (job pages with JobPosting data)
+  { ats: "sitemap", slug: "www.talentd.in", company: "Talentd" },
+  { ats: "sitemap", slug: "interndoor.com", company: "InternDoor" },
+  { ats: "sitemap", slug: "search.jobs.barclays", company: "Barclays" },
+  { ats: "sitemap", slug: "jobs.citi.com", company: "Citi" },
+  { ats: "sitemap", slug: "careers.qualcomm.com", company: "Qualcomm" },
+  { ats: "sitemap", slug: "careers.synopsys.com", company: "Synopsys" },
+  { ats: "sitemap", slug: "jobs.ericsson.com", company: "Ericsson" },
+  // Banks, product and chip companies hiring in India, found with findCompanyBoards (checked live Nov 2026)
+  { ats: "oracle", slug: "jpmc.fa.oraclecloud.com/CX_1001", company: "JPMorgan Chase" },
+  { ats: "eightfold", slug: "morganstanley/morganstanley.com", company: "Morgan Stanley" },
+  { ats: "eightfold", slug: "micron/micron.com", company: "Micron" },
+  { ats: "eightfold", slug: "autodesk/autodesk.com", company: "Autodesk" },
+  { ats: "sitemap", slug: "careers.mastercard.com", company: "Mastercard" },
+  { ats: "sitemap", slug: "careers.cisco.com", company: "Cisco" },
+  { ats: "sitemap", slug: "careers.adobe.com", company: "Adobe" },
+  { ats: "sitemap", slug: "jobs.intuit.com", company: "Intuit" },
+  { ats: "sitemap", slug: "careers.arm.com", company: "Arm" },
+  { ats: "sitemap", slug: "careers.philips.com", company: "Philips" },
+  { ats: "sitemap", slug: "jobs.paloaltonetworks.com", company: "Palo Alto Networks" },
+  { ats: "sitemap", slug: "careers.blackrock.com", company: "BlackRock" },
+  { ats: "sitemap", slug: "careers.statestreet.com", company: "State Street" },
+  { ats: "sitemap", slug: "careers.tesco.com", company: "Tesco" },
+  { ats: "smartrecruiters", slug: "ServiceNow", company: "ServiceNow" },
+  { ats: "smartrecruiters", slug: "WesternDigital", company: "Western Digital" },
+  { ats: "smartrecruiters", slug: "Swiggy", company: "Swiggy" },
+  { ats: "smartrecruiters", slug: "Mindtickle", company: "Mindtickle" },
+  { ats: "greenhouse", slug: "sigmoid", company: "Sigmoid" },
+  { ats: "greenhouse", slug: "twilio", company: "Twilio" },
+  { ats: "greenhouse", slug: "okta", company: "Okta" },
+  { ats: "greenhouse", slug: "zscaler", company: "Zscaler" },
+  { ats: "greenhouse", slug: "highradius", company: "HighRadius" },
+  { ats: "greenhouse", slug: "agoda", company: "Agoda" },
+  { ats: "ashby", slug: "snowflake", company: "Snowflake" },
+  { ats: "ashby", slug: "tekion", company: "Tekion" },
+  // From your lists: AI startups, funded companies and target companies (checked live Nov 2026)
+  { ats: "workable", slug: "leena-ai", company: "Leena AI" },
+  { ats: "ashby", slug: "lyzr", company: "Lyzr AI" },
+  { ats: "ashby", slug: "sensi-ai", company: "Sensi.AI" },
+  { ats: "ashby", slug: "openrouter", company: "OpenRouter" },
+  { ats: "ashby", slug: "e2b", company: "E2B" },
+  { ats: "ashby", slug: "nousresearch", company: "Nous Research" },
+  { ats: "ashby", slug: "zyphra", company: "Zyphra" },
+  { ats: "ashby", slug: "imprint", company: "Imprint" },
+  { ats: "greenhouse", slug: "clara", company: "Clara" },
+  { ats: "greenhouse", slug: "pathrobotics", company: "Path Robotics" },
+  { ats: "sitemap", slug: "careers.unilever.com", company: "Unilever" },
 ];
 
-const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+// Workday / Oracle / Eightfold slugs have two parts ("nvidia.wd5/NVIDIAExternalCareerSite")
+const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}(\/[A-Za-z0-9][A-Za-z0-9._-]{0,99})?$/;
 
 export function isValidSource(s: Partial<JobSource> | null | undefined): s is JobSource {
   return !!s && typeof s.slug === "string" && SLUG.test(s.slug) && typeof s.ats === "string" && s.ats in ATS_LABELS;
@@ -235,8 +304,8 @@ export function sourceFromUrl(input: string): JobSource | null {
   }
   const host = u.hostname.toLowerCase().replace(/^www\./, "");
   const parts = u.pathname.split("/").filter(Boolean);
-  const make = (ats: AtsId, slug: string | undefined): JobSource | null =>
-    slug && SLUG.test(slug) ? { ats, slug, company: titleCase(slug) } : null;
+  const make = (ats: AtsId, slug: string | undefined, name?: string): JobSource | null =>
+    slug && SLUG.test(slug) ? { ats, slug, company: titleCase(name ?? slug) } : null;
 
   if (/(^|\.)greenhouse\.io$/.test(host)) {
     if (host.startsWith("boards-api.")) return make("greenhouse", parts[2]); // /v1/boards/{slug}/jobs
@@ -254,8 +323,59 @@ export function sourceFromUrl(input: string): JobSource | null {
   }
   const rec = host.match(/^([a-z0-9-]+)\.recruitee\.com$/);
   if (rec) return make("recruitee", rec[1]);
+
+  // Workday: nvidia.wd5.myworkdayjobs.com/[en-US/]NVIDIAExternalCareerSite/job/…, or the /wday/cxs/{tenant}/{site} API
+  const wd = host.match(/^([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com$/);
+  if (wd) {
+    const rest = parts[0] === "wday" ? parts.slice(3) : parts;
+    const site = /^[a-z]{2}-[A-Z]{2}$/.test(rest[0] ?? "") ? rest[1] : rest[0];
+    return site && site !== "job" ? make("workday", `${wd[1]}.${wd[2]}/${site}`, wd[1]) : null;
+  }
+  // Oracle Recruiting Cloud: {host}.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/…
+  if (host.endsWith(".oraclecloud.com")) {
+    const site = parts[parts.indexOf("sites") + 1] ?? u.searchParams.get("siteNumber");
+    return parts.includes("sites") && site ? make("oracle", `${host}/${site}`, host.split(".")[0]) : null;
+  }
+  // Eightfold: paypal.eightfold.ai/careers… (the company domain is usually {name}.com)
+  const ef = host.match(/^([a-z0-9-]+)\.eightfold\.ai$/);
+  if (ef && ef[1] !== "app" && ef[1] !== "www") return make("eightfold", `${ef[1]}/${u.searchParams.get("domain") || `${ef[1]}.com`}`, ef[1]);
+  // Microsoft runs Eightfold on its own domain
+  if (host === "apply.careers.microsoft.com" || host === "jobs.careers.microsoft.com" || host === "careers.microsoft.com") {
+    return { ats: "eightfold", slug: "apply.careers.microsoft.com/microsoft.com", company: "Microsoft" };
+  }
+  if (host === "amazon.jobs") return { ats: "amazon", slug: "amazon", company: "Amazon" };
+  const bz = host.match(/^([a-z0-9-]+)\.breezy\.hr$/);
+  if (bz) return make("breezy", bz[1]);
+  if ((host === "google.com" && u.pathname.startsWith("/about/careers")) || host === "careers.google.com") return { ats: "google", slug: "google", company: "Google" };
+  // Job aggregators and career sites read through their sitemap
+  const site = SITEMAP_SITES.find((x) => host === x.host.replace(/^www\./, "") || host === x.host);
+  if (site) return { ats: "sitemap", slug: site.host, company: site.company };
   return null;
 }
+
+/** Sites read through their sitemap + JobPosting pages (no public API). Users can add others from the careers page box. */
+export const SITEMAP_SITES: { host: string; company: string }[] = [
+  { host: "www.talentd.in", company: "Talentd" },
+  { host: "interndoor.com", company: "InternDoor" },
+  { host: "search.jobs.barclays", company: "Barclays" },
+  { host: "jobs.citi.com", company: "Citi" },
+  { host: "careers.qualcomm.com", company: "Qualcomm" },
+  { host: "careers.synopsys.com", company: "Synopsys" },
+  { host: "jobs.ericsson.com", company: "Ericsson" },
+  { host: "jobs.thermofisher.com", company: "Thermo Fisher Scientific" },
+  { host: "careers.mastercard.com", company: "Mastercard" },
+  { host: "careers.cisco.com", company: "Cisco" },
+  { host: "careers.adobe.com", company: "Adobe" },
+  { host: "jobs.intuit.com", company: "Intuit" },
+  { host: "careers.arm.com", company: "Arm" },
+  { host: "careers.philips.com", company: "Philips" },
+  { host: "jobs.paloaltonetworks.com", company: "Palo Alto Networks" },
+  { host: "careers.blackrock.com", company: "BlackRock" },
+  { host: "careers.statestreet.com", company: "State Street" },
+  { host: "careers.tesco.com", company: "Tesco" },
+  { host: "careers.micron.com", company: "Micron" },
+  { host: "careers.unilever.com", company: "Unilever" },
+];
 
 /** Public list endpoint for a board. */
 export function boardApiUrl(s: JobSource, page = 0): string {
@@ -267,6 +387,9 @@ export function boardApiUrl(s: JobSource, page = 0): string {
     case "smartrecruiters": return `https://api.smartrecruiters.com/v1/companies/${slug}/postings?limit=100&offset=${page * 100}`;
     case "workable": return `https://apply.workable.com/api/v1/widget/accounts/${slug}?details=true`;
     case "recruitee": return `https://${slug.toLowerCase()}.recruitee.com/api/offers/`;
+    case "breezy": return `https://${slug.toLowerCase()}.breezy.hr/json`;
+    // Read by their own fetchers (several requests each)
+    case "workday": case "oracle": case "eightfold": case "google": case "amazon": case "sitemap": return "";
   }
 }
 
@@ -574,6 +697,10 @@ export interface FetchBoardOptions {
   /** SmartRecruiters only: fetch descriptions for jobs passing this test (detail call per job) */
   needsDetail?: (job: DiscoveredJob) => boolean;
   maxDetails?: number;
+  /** The user's filters: Workday / Eightfold / Google search by their country, sitemap sites by their keywords */
+  filters?: DiscoverFilters;
+  /** Sitemap sites: job pages read per scan (default 24) */
+  maxPages?: number;
 }
 
 async function getJson(url: string, opts: FetchBoardOptions): Promise<unknown> {
@@ -589,6 +716,15 @@ async function getJson(url: string, opts: FetchBoardOptions): Promise<unknown> {
 /** Every open job on one board. Throws on network errors or an unknown board. */
 export async function fetchBoard(src: JobSource, opts: FetchBoardOptions = {}): Promise<DiscoveredJob[]> {
   if (!isValidSource(src)) throw new Error("Invalid board");
+  switch (src.ats) {
+    case "workday": return fetchWorkday(src, opts);
+    case "oracle": return fetchOracle(src, opts);
+    case "eightfold": return fetchEightfold(src, opts);
+    case "breezy": return fetchBreezy(src, opts);
+    case "google": return fetchGoogle(src, opts);
+    case "amazon": return fetchAmazon(src, opts);
+    case "sitemap": return fetchSitemapSite(src, opts);
+  }
   if (src.ats !== "smartrecruiters") return parseBoard(src, await getJson(boardApiUrl(src), opts));
 
   // SmartRecruiters pages 100 at a time; cap at 3 pages to stay fast
@@ -622,10 +758,15 @@ export interface BoardResult {
 /** Fetch many boards with limited concurrency; one failing board never fails the rest. */
 export async function fetchBoards(sources: JobSource[], opts: FetchBoardOptions & { concurrency?: number } = {}): Promise<BoardResult[]> {
   const results: BoardResult[] = new Array(sources.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < sources.length) {
-      const i = next++;
+  // Two queues: sources that need many requests or download megabytes (career-site sitemaps, Lever's full-text
+  // boards, Workday / Eightfold / Oracle / Google / Amazon paging) run a few at a time, so they never starve the
+  // quick single-request boards running alongside them
+  const HEAVY = new Set<AtsId>(["sitemap", "lever", "workday", "eightfold", "oracle", "google", "amazon"]);
+  const heavy = sources.map((_, i) => i).filter((i) => HEAVY.has(sources[i].ats));
+  const light = sources.map((_, i) => i).filter((i) => !HEAVY.has(sources[i].ats));
+  const run = async (queue: number[]) => {
+    while (queue.length) {
+      const i = queue.shift()!;
       try {
         results[i] = { source: sources[i], jobs: await fetchBoard(sources[i], opts), error: null };
       } catch (e) {
@@ -635,6 +776,475 @@ export async function fetchBoards(sources: JobSource[], opts: FetchBoardOptions 
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(opts.concurrency ?? 8, sources.length) }, worker));
+  const total = Math.max(1, opts.concurrency ?? 8);
+  const heavyWorkers = Math.min(heavy.length, Math.max(1, Math.min(5, Math.floor(total / 3))));
+  const lightWorkers = Math.min(light.length, Math.max(1, total - heavyWorkers));
+  await Promise.all([
+    ...Array.from({ length: heavyWorkers }, () => run(heavy)),
+    ...Array.from({ length: lightWorkers }, () => run(light)),
+  ]);
   return results;
 }
+
+/* ------------------------------ more job systems ------------------------------ */
+// Workday, Oracle Recruiting Cloud, Eightfold, Breezy, Google Careers, and any careers site or job aggregator that
+// lists its job pages in a sitemap and marks them up as schema.org JobPosting (what Google for Jobs reads).
+// Their slugs hold what the API needs:
+//   workday   "nvidia.wd5/NVIDIAExternalCareerSite"            ({tenant}.wd{n}/{site})
+//   oracle    "fa-etqo-saasfaprod1.fa.ocs.oraclecloud.com/CX_1" ({host}/{site number})
+//   eightfold "paypal/paypal.com"                              ({subdomain}/{company domain})
+//   breezy    "accrete-ai"                                     ({company}.breezy.hr)
+//   google    "google"
+//   sitemap   "www.talentd.in"                                 (host)
+
+const BROWSER_HEADERS: Record<string, string> = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
+async function request(url: string, opts: FetchBoardOptions, init: RequestInit = {}): Promise<Response> {
+  const f = opts.fetchImpl ?? fetch;
+  const timer = AbortSignal.timeout(opts.timeoutMs ?? 20_000);
+  const signal = opts.signal ? AbortSignal.any([opts.signal, timer]) : timer;
+  const res = await f(url, { ...init, signal, headers: { ...BROWSER_HEADERS, ...((init.headers as Record<string, string>) ?? {}) } });
+  if (res.status === 404) throw new Error("Board not found (check the link)");
+  if (res.status === 429) throw new Error("The job site is limiting requests; it will be read again on the next scan");
+  if (!res.ok && !(init.redirect === "manual" && res.status >= 300 && res.status < 400)) throw new Error(`HTTP ${res.status}`);
+  return res;
+}
+const getText = async (url: string, opts: FetchBoardOptions) => (await request(url, opts, { headers: { Accept: "text/html,application/xml,text/xml,*/*" } })).text();
+const getJsonB = async (url: string, opts: FetchBoardOptions): Promise<unknown> => (await request(url, opts, { headers: { Accept: "application/json" } })).json();
+const postJson = async (url: string, body: unknown, opts: FetchBoardOptions): Promise<unknown> =>
+  (await request(url, opts, { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
+
+/** The country (or first place) in the filters, for systems that search by location: "india" → "India". */
+function placeFilter(f?: DiscoverFilters): string {
+  const locs = f?.locations ?? [];
+  const pick = locs.find((l) => /^(india|united states|usa|united kingdom|uk|canada|germany|singapore|australia|ireland|netherlands)$/i.test(l.trim())) ?? locs[0] ?? "";
+  return pick.trim().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Load descriptions for the jobs that pass the filters (one request each, a few at a time). */
+async function withDetails(jobs: DiscoveredJob[], opts: FetchBoardOptions, load: (j: DiscoveredJob) => Promise<string>, concurrency = 4): Promise<void> {
+  if (!opts.needsDetail) return;
+  const want = jobs.filter((j) => !j.text && opts.needsDetail!(j)).slice(0, opts.maxDetails ?? 15);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(concurrency, want.length) }, async () => {
+    while (next < want.length) {
+      const j = want[next++];
+      try { j.text = await load(j); } catch { /* keep the job without a description */ }
+    }
+  }));
+}
+
+/* ---------- Workday ---------- */
+
+function workdayParts(slug: string) {
+  const [hostPart, ...site] = slug.split("/");
+  return { host: `${hostPart}.myworkdayjobs.com`, tenant: hostPart.split(".")[0], site: site.join("/") };
+}
+
+/** "Posted Today" / "Posted Yesterday" / "Posted 3 Days Ago" / "Posted 30+ Days Ago" → ISO date. */
+export function workdayPostedAt(text: string, now = Date.now()): string | null {
+  const t = text.toLowerCase();
+  if (/today|just posted/.test(t)) return new Date(now).toISOString();
+  if (/yesterday/.test(t)) return new Date(now - 86_400_000).toISOString();
+  const m = t.match(/(\d+)\+?\s*days?\s*ago/);
+  return m ? new Date(now - Number(m[1]) * 86_400_000).toISOString() : null;
+}
+
+export function parseWorkdayJobs(src: JobSource, data: unknown, now = Date.now()): DiscoveredJob[] {
+  const { host, site } = workdayParts(src.slug);
+  return arr(o(data).jobPostings).flatMap((raw) => {
+    const j = o(raw);
+    const path = s(j.externalPath);
+    const title = s(j.title).trim();
+    if (!path || !title) return [];
+    const url = `https://${host}/${site}${path}`;
+    const location = s(j.locationsText);
+    return [{
+      id: `workday:${src.slug}:${path.split("_").pop() || path}`, ats: "workday" as const, slug: src.slug, company: src.company,
+      title, location, remote: remoteFrom(null, location, s(j.remoteType)), department: "", url, applyUrl: url,
+      postedAt: workdayPostedAt(s(j.postedOn), now), text: "",
+    }];
+  });
+}
+
+async function fetchWorkday(src: JobSource, opts: FetchBoardOptions): Promise<DiscoveredJob[]> {
+  const { tenant, site, host } = workdayParts(src.slug);
+  const api = `https://${host}/wday/cxs/${tenant}/${site}`;
+  // Big employers list thousands of roles: search for the country in the filters first (Workday searches locations too)
+  let search = placeFilter(opts.filters);
+  const jobs: DiscoveredJob[] = [];
+  let total = 0;
+  for (let page = 0; page < 5; page++) {
+    const data = await postJson(`${api}/jobs`, { appliedFacets: {}, limit: 20, offset: page * 20, searchText: search }, opts);
+    if (page === 0) total = Number(o(data).total) || 0;
+    const batch = parseWorkdayJobs(src, data);
+    if (page === 0 && !batch.length && search) { search = ""; page = -1; continue; } // nothing for that place: list everything
+    jobs.push(...batch);
+    if (batch.length < 20 || jobs.length >= total) break;
+  }
+  await withDetails(jobs, opts, async (j) => {
+    const path = new URL(j.url).pathname.slice(site.length + 1);
+    return htmlToText(s(o(o(await getJsonB(`${api}${path}`, opts)).jobPostingInfo).jobDescription));
+  }, 2);
+  return jobs;
+}
+
+/* ---------- Oracle Recruiting Cloud ---------- */
+
+function oracleParts(slug: string) {
+  const i = slug.lastIndexOf("/");
+  return { host: slug.slice(0, i), site: slug.slice(i + 1) };
+}
+
+export function parseOracleJobs(src: JobSource, data: unknown): DiscoveredJob[] {
+  const { host, site } = oracleParts(src.slug);
+  const item = o(arr(o(data).items)[0]);
+  return arr(item.requisitionList).flatMap((raw) => {
+    const j = o(raw);
+    const id = s(j.Id);
+    const title = s(j.Title).trim();
+    if (!id || !title) return [];
+    const location = [s(j.PrimaryLocation), ...arr(j.secondaryLocations).map((l) => s(o(l).Name))].filter((v, i, a) => v && a.indexOf(v) === i).join(" / ");
+    const url = `https://${host}/hcmUI/CandidateExperience/en/sites/${site}/job/${id}`;
+    return [{
+      id: `oracle:${src.slug}:${id}`, ats: "oracle" as const, slug: src.slug, company: src.company, title, location,
+      remote: /remote/i.test(s(j.WorkplaceTypeCode) + s(j.WorkplaceType)) ? true : remoteFrom(null, location),
+      department: s(j.Department) || s(j.JobFamily), url, applyUrl: url, postedAt: iso(j.PostedDate),
+      text: [s(j.ShortDescriptionStr), s(j.ExternalResponsibilitiesStr), s(j.ExternalQualificationsStr)].map(htmlToText).filter(Boolean).join("\n\n"),
+    }];
+  });
+}
+
+async function fetchOracle(src: JobSource, opts: FetchBoardOptions): Promise<DiscoveredJob[]> {
+  const { host, site } = oracleParts(src.slug);
+  const api = `https://${host}/hcmRestApi/resources/latest`;
+  const jobs: DiscoveredJob[] = [];
+  for (let page = 0; page < 2; page++) {
+    const data = await getJsonB(`${api}/recruitingCEJobRequisitions?onlyData=true&expand=requisitionList.secondaryLocations&finder=findReqs;siteNumber=${encodeURIComponent(site)},limit=100,offset=${page * 100},sortBy=POSTING_DATES_DESC`, opts);
+    const batch = parseOracleJobs(src, data);
+    jobs.push(...batch);
+    if (batch.length < 100 || jobs.length >= (Number(o(arr(o(data).items)[0]).TotalJobsCount) || 0)) break;
+  }
+  await withDetails(jobs.filter((j) => j.text.length < 200), opts, async (j) => {
+    const id = j.id.split(":").pop()!;
+    const d = o(arr(o(await getJsonB(`${api}/recruitingCEJobRequisitionDetails?expand=all&onlyData=true&finder=ById;Id=%22${encodeURIComponent(id)}%22,siteNumber=${encodeURIComponent(site)}`, opts)).items)[0]);
+    return [s(d.ExternalDescriptionStr), s(d.ExternalResponsibilitiesStr), s(d.ExternalQualificationsStr)].map(htmlToText).filter(Boolean).join("\n\n");
+  });
+  return jobs;
+}
+
+/* ---------- Eightfold ---------- */
+
+export function parseEightfoldJobs(src: JobSource, positions: unknown): DiscoveredJob[] {
+  const host = eightfoldHost(src.slug);
+  return arr(positions).flatMap((raw) => {
+    const j = o(raw);
+    const id = s(j.id);
+    const title = s(j.name).trim();
+    if (!id || !title) return [];
+    const location = arr(j.locations).map(s).filter(Boolean).join(" / ");
+    const url = `https://${host}/careers/job/${id}`;
+    const ts = Number(j.postedTs) || Number(j.creationTs) || 0;
+    return [{
+      id: `eightfold:${src.slug}:${id}`, ats: "eightfold" as const, slug: src.slug, company: src.company, title, location,
+      remote: s(j.workLocationOption) === "remote" ? true : s(j.workLocationOption) === "onsite" ? false : remoteFrom(null, location),
+      department: s(j.department), url, applyUrl: url, postedAt: ts ? new Date(ts * 1000).toISOString() : null, text: "",
+    }];
+  });
+}
+
+async function fetchEightfold(src: JobSource, opts: FetchBoardOptions): Promise<DiscoveredJob[]> {
+  const host = eightfoldHost(src.slug);
+  const domain = src.slug.split("/")[1];
+  const base = `https://${host}/api/pcsx`;
+  const place = placeFilter(opts.filters);
+  const jobs: DiscoveredJob[] = [];
+  for (let start = 0; start < 100; start += 10) {
+    const d = o(o(await getJsonB(`${base}/search?domain=${encodeURIComponent(domain)}&query=&location=${encodeURIComponent(place)}&start=${start}`, opts)).data);
+    const batch = parseEightfoldJobs(src, d.positions);
+    jobs.push(...batch);
+    if (batch.length < 10 || jobs.length >= (Number(d.count) || 0)) break;
+  }
+  await withDetails(jobs, opts, async (j) =>
+    htmlToText(s(o(o(await getJsonB(`${base}/position_details?position_id=${encodeURIComponent(j.id.split(":").pop()!)}&domain=${encodeURIComponent(domain)}&hl=en`, opts)).data).jobDescription)), 2);
+  return jobs;
+}
+
+/** Eightfold host: "{name}.eightfold.ai", or the company's own domain ("apply.careers.microsoft.com"). */
+function eightfoldHost(slug: string): string {
+  const first = slug.split("/")[0];
+  return first.includes(".") ? first : `${first}.eightfold.ai`;
+}
+
+/* ---------- Amazon ---------- */
+
+const COUNTRY_ISO3: Record<string, string> = {
+  india: "IND", "united states": "USA", usa: "USA", "united kingdom": "GBR", uk: "GBR", canada: "CAN", germany: "DEU",
+  singapore: "SGP", australia: "AUS", ireland: "IRL", netherlands: "NLD",
+};
+
+export function parseAmazonJobs(src: JobSource, data: unknown): DiscoveredJob[] {
+  return arr(o(data).jobs).flatMap((raw) => {
+    const j = o(raw);
+    const path = s(j.job_path);
+    const title = s(j.title).trim();
+    if (!path || !title) return [];
+    const url = `https://www.amazon.jobs${path}`;
+    const location = s(j.normalized_location) || s(j.location);
+    return [{
+      id: `amazon:${src.slug}:${s(j.id_icims) || s(j.id)}`, ats: "amazon" as const, slug: src.slug, company: src.company, title, location,
+      remote: remoteFrom(null, location), department: s(j.job_category) || s(j.business_category), url, applyUrl: s(j.url_next_step) || url,
+      postedAt: iso(j.posted_date),
+      text: [s(j.description), s(j.basic_qualifications) && `Basic qualifications\n${s(j.basic_qualifications)}`, s(j.preferred_qualifications) && `Preferred qualifications\n${s(j.preferred_qualifications)}`]
+        .filter(Boolean).map(htmlToText).join("\n\n"),
+    }];
+  });
+}
+
+/** amazon.jobs: the newest roles in the filters' country (300 at most), descriptions included. */
+async function fetchAmazon(src: JobSource, opts: FetchBoardOptions): Promise<DiscoveredJob[]> {
+  const country = COUNTRY_ISO3[placeFilter(opts.filters).toLowerCase()];
+  const jobs: DiscoveredJob[] = [];
+  for (let page = 0; page < 3; page++) {
+    const q = new URLSearchParams({ result_limit: "100", sort: "recent", offset: String(page * 100), base_query: "" });
+    if (country) q.append("normalized_country_code[]", country);
+    const data = await getJsonB(`https://www.amazon.jobs/en/search.json?${q}`, opts);
+    const batch = parseAmazonJobs(src, data);
+    jobs.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return jobs;
+}
+
+/* ---------- Breezy ---------- */
+
+export function parseBreezyJobs(src: JobSource, data: unknown): DiscoveredJob[] {
+  return arr(data).flatMap((raw) => {
+    const j = o(raw);
+    const id = s(j.id);
+    const title = s(j.name).trim();
+    const url = s(j.url);
+    if (!id || !title || !url) return [];
+    const loc = o(j.location);
+    const location = s(loc.name) || [s(loc.city), s(o(loc.state).name), s(o(loc.country).name)].filter(Boolean).join(", ");
+    return [{
+      id: `breezy:${src.slug}:${id}`, ats: "breezy" as const, slug: src.slug, company: s(j.company && o(j.company).name) || src.company, title, location,
+      remote: remoteFrom(loc.is_remote, location), department: s(j.department), url, applyUrl: url, postedAt: iso(j.published_date), text: "",
+    }];
+  });
+}
+
+async function fetchBreezy(src: JobSource, opts: FetchBoardOptions): Promise<DiscoveredJob[]> {
+  const jobs = parseBreezyJobs(src, await getJsonB(`https://${encodeURIComponent(src.slug.toLowerCase())}.breezy.hr/json`, opts));
+  await withDetails(jobs, opts, async (j) => jobsFromJsonLd(await getText(j.url, opts), j.url)[0]?.text ?? "");
+  return jobs;
+}
+
+/* ---------- Google Careers ---------- */
+
+/** Job cards on a Google Careers results page: title (link label), locations and minimum qualifications. */
+export function parseGoogleJobs(src: JobSource, html: string): DiscoveredJob[] {
+  const out: DiscoveredJob[] = [];
+  const seen = new Set<string>();
+  const links = [...html.matchAll(/href="jobs\/results\/(\d+)-([a-z0-9-]*)[^"]*"[^>]{0,200}?aria-label="Learn more about ([^"]+)"/g)];
+  let prev = 0;
+  for (const m of links) {
+    const card = html.slice(prev, m.index);
+    prev = (m.index ?? 0) + m[0].length;
+    const id = m[1];
+    if (seen.has(id)) continue;
+    seen.add(id);
+    // Each location appears twice (card + tooltip), with "; " separators of its own
+    const location = [...card.matchAll(/class="r0wTof[^"]*">([^<]+)</g)]
+      .map((x) => decodeEntities(x[1]).replace(/^[;\s]+|[;\s]+$/g, "").trim())
+      .filter((v, i, a) => v && a.indexOf(v) === i).join("; ");
+    const quals = card.match(/Minimum qualifications<\/h4>\s*(<ul>[\s\S]*?<\/ul>)/)?.[1] ?? "";
+    const url = `https://www.google.com/about/careers/applications/jobs/results/${id}-${m[2]}`;
+    out.push({
+      id: `google:google:${id}`, ats: "google", slug: src.slug, company: src.company || "Google", title: decodeEntities(m[3]).trim(), location,
+      remote: remoteFrom(null, location), department: "", url, applyUrl: url, postedAt: null,
+      text: quals ? `Minimum qualifications\n${htmlToText(quals)}` : "",
+    });
+  }
+  return out;
+}
+
+async function fetchGoogle(src: JobSource, opts: FetchBoardOptions): Promise<DiscoveredJob[]> {
+  const params = new URLSearchParams();
+  const place = placeFilter(opts.filters);
+  if (place) params.set("location", place);
+  if (opts.filters?.earlyCareerOnly !== false) {
+    params.append("target_level", "EARLY");
+    params.append("target_level", "INTERN_AND_APPRENTICE");
+  }
+  const jobs: DiscoveredJob[] = [];
+  for (let page = 1; page <= 4; page++) {
+    params.set("page", String(page));
+    const batch = parseGoogleJobs(src, await getText(`https://www.google.com/about/careers/applications/jobs/results?${params}`, opts));
+    const fresh = batch.filter((j) => !jobs.some((x) => x.id === j.id));
+    jobs.push(...fresh);
+    if (fresh.length < 10) break;
+  }
+  return jobs;
+}
+
+/* ---------- any careers site with a sitemap ---------- */
+
+/** schema.org JobPosting data in a page (Google for Jobs markup) → jobs. */
+export function jobsFromJsonLd(html: string, pageUrl: string, source?: Pick<JobSource, "ats" | "slug" | "company">): DiscoveredJob[] {
+  let host = "";
+  try { host = new URL(pageUrl).hostname.replace(/^www\./, ""); } catch { /* keep empty */ }
+  const jobs: DiscoveredJob[] = [];
+  for (const m of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    let data: unknown;
+    try { data = JSON.parse(m[1].trim()); } catch { continue; }
+    const graph = o(data)["@graph"];
+    const nodes: unknown[] = Array.isArray(data) ? data : Array.isArray(graph) ? graph : [data];
+    for (const n of nodes) {
+      const j = o(n);
+      const type = j["@type"];
+      if (!(type === "JobPosting" || (Array.isArray(type) && type.includes("JobPosting")))) continue;
+      const org = o(j.hiringOrganization);
+      const places = Array.isArray(j.jobLocation) ? j.jobLocation : [j.jobLocation];
+      const location = places
+        .map((p) => { const a = o(o(p).address); return [s(a.addressLocality), s(a.addressRegion), s(o(a.addressCountry).name) || s(a.addressCountry)].filter(Boolean).join(", "); })
+        .filter((v, i, a) => v && a.indexOf(v) === i).join(" / ");
+      const company = s(org.name).trim() || source?.company || host;
+      // Aggregators title posts "IBM is Hiring Quality Engineer …": keep the role
+      // "IBM is Hiring …", "IBM Bangalore Hiring …", "UST Hiring …": the words before "hiring" (company, maybe city) go
+      const raw = decodeEntities(s(j.title)).trim();
+      const lead = raw.match(/^(.{0,40}?)\s+(?:is\s+)?hiring\s+(?:for\s+)?(.+)$/i);
+      const title = lead && lead[1].toLowerCase().startsWith(company.toLowerCase().split(/\s+/)[0]) ? lead[2].trim() : raw;
+      if (!title) continue;
+      const url = s(j.url) || pageUrl;
+      const id = s(o(j.identifier).value) || s(j.identifier) || url;
+      jobs.push({
+        id: `${source?.ats ?? "page"}:${source?.slug ?? host}:${id}`,
+        ats: source?.ats ?? "greenhouse", // page jobs (no source) are never fetched as a board; sourceLabel is shown
+        sourceLabel: source?.company ?? "Careers page",
+        slug: source?.slug ?? host,
+        company,
+        title,
+        location,
+        remote: s(j.jobLocationType).toUpperCase() === "TELECOMMUTE" ? true : remoteFrom(null, location),
+        department: "",
+        url,
+        applyUrl: url,
+        postedAt: iso(j.datePosted),
+        text: htmlToText(s(j.description)),
+      });
+    }
+  }
+  return jobs;
+}
+
+/** A host the server may read: a real domain name, never localhost, an IP address or an internal name. */
+function publicHost(h: string): boolean {
+  const host = h.toLowerCase();
+  return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(host) && !/(^|\.)(localhost|local|internal)$/.test(host);
+}
+
+const JOB_SECTION = /\/(jobs?|careers?|positions?|openings?|vacanc(?:y|ies)|opportunit(?:y|ies))\//i;
+const LISTING_PAGE = /^(jobs-in-.*|.*-jobs|jobs|careers|search|alerts?|internships?|freshers?|remote|companies|categories)$/i;
+
+/** A job page address (not a category, city or search page): a long title slug or a numeric id under a jobs path. */
+export function looksLikeJobUrl(url: string): boolean {
+  let u: URL;
+  try { u = new URL(url); } catch { return false; }
+  const segs = u.pathname.split("/").filter(Boolean);
+  const last = segs[segs.length - 1] ?? "";
+  if (!JOB_SECTION.test(`${u.pathname}/`) || LISTING_PAGE.test(last)) return false;
+  return /\d{4,}/.test(u.pathname) || last.split("-").length >= 4;
+}
+
+/** The words in a job page address: ".../job/pune/software-engineer/13015/98..." → "pune software engineer". */
+const urlWords = (url: string) => {
+  try { return decodeURIComponent(new URL(url).pathname).replace(/\d{4,}/g, " ").replace(/[-_/.]+/g, " ").replace(/\s+/g, " ").trim(); } catch { return ""; }
+};
+
+/** GET a page of a user-chosen site, following redirects only to other public hosts (never internal addresses). */
+async function getPublicText(url: string, opts: FetchBoardOptions): Promise<string> {
+  let current = url;
+  for (let hop = 0; hop < 4; hop++) {
+    const u = new URL(current);
+    if (u.protocol !== "https:" && u.protocol !== "http:") throw new Error("Not a web address");
+    if (!publicHost(u.hostname)) throw new Error("Not a public website");
+    const res = await request(current, opts, { redirect: "manual", headers: { Accept: "text/html,application/xml,text/xml,*/*" } });
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get("location");
+      if (!loc) throw new Error("Redirect without an address");
+      current = new URL(loc, current).toString();
+      continue;
+    }
+    return res.text();
+  }
+  throw new Error("Too many redirects");
+}
+
+async function sitemapUrls(host: string, opts: FetchBoardOptions): Promise<{ loc: string; mod: string }[]> {
+  const base = `https://${host}`;
+  let maps: string[] = [];
+  try {
+    maps = [...(await getPublicText(`${base}/robots.txt`, opts)).matchAll(/^\s*sitemap:\s*(\S+)/gim)].map((m) => m[1]);
+  } catch { /* no robots.txt */ }
+  if (!maps.length) maps = [`${base}/sitemap.xml`];
+  // Job sitemaps first; skip tag / skill / category / company maps
+  const rank = (u: string) => (/job|career|position|opening/i.test(u) ? 0 : 1) + (/skill|tag|categor|compan|locat|article|news|blog|author|topic/i.test(u) ? 2 : 0);
+  maps = maps.filter((m) => { try { return new URL(m).hostname.endsWith(host.replace(/^www\./, "")); } catch { return false; } }).sort((a, b) => rank(a) - rank(b)).slice(0, 2);
+  const entries: { loc: string; mod: string }[] = [];
+  const read = async (url: string, depth: number) => {
+    const xml = await getPublicText(url, opts);
+    if (/<sitemapindex/i.test(xml) && depth === 0) {
+      const children = [...xml.matchAll(/<loc>\s*([^<\s]+)/g)].map((m) => decodeEntities(m[1])).sort((a, b) => rank(a) - rank(b)).slice(0, 3);
+      for (const c of children) await read(c, 1).catch(() => {});
+      return;
+    }
+    for (const m of xml.matchAll(/<url>([\s\S]*?)<\/url>/g)) {
+      const loc = decodeEntities(m[1].match(/<loc>\s*([^<\s]+)/)?.[1] ?? "");
+      if (loc) entries.push({ loc, mod: m[1].match(/<lastmod>\s*([^<\s]+)/)?.[1] ?? "" });
+      if (entries.length > 30_000) break;
+    }
+  };
+  for (const m of maps) await read(m, 0).catch(() => {});
+  return entries;
+}
+
+/**
+ * Jobs from a careers site or job aggregator that has no public API (Talentd, InternDoor, Radancy career sites like
+ * Barclays and Citi): its sitemap lists every job page, and each page carries JobPosting data. Pages whose address
+ * matches the keywords are read first, newest first, up to `maxPages`.
+ */
+async function fetchSitemapSite(src: JobSource, opts: FetchBoardOptions): Promise<DiscoveredJob[]> {
+  const host = src.slug.toLowerCase();
+  if (!publicHost(host)) throw new Error("Not a public website");
+  const bare = host.replace(/^www\./, "");
+  const f = opts.filters;
+  const candidates = (await sitemapUrls(host, opts))
+    .filter((e) => { try { const h = new URL(e.loc).hostname.toLowerCase(); return (h === bare || h.endsWith(`.${bare}`)) && looksLikeJobUrl(e.loc); } catch { return false; } })
+    .map((e, i) => ({ ...e, i, words: urlWords(e.loc) }))
+    .filter((e) => !f?.keywords.length || f.keywords.some((k) => containsTerm(e.words, k)))
+    .filter((e) => !f?.earlyCareerOnly || !isSeniorTitle(e.words));
+  if (!candidates.length) return [];
+  // Sites that list every job in several languages: keep the English pages ("/cs/job/…" → skip, "/en/…" or none → keep)
+  const foreign = (url: string) => { try { return /^\/(?!en(?:[-_][a-z]{2})?\/)[a-z]{2}(?:[-_][a-z]{2})?\//i.test(new URL(url).pathname); } catch { return false; } };
+  if (candidates.some((c) => !foreign(c.loc))) candidates.splice(0, candidates.length, ...candidates.filter((c) => !foreign(c.loc)));
+  const inPlace = (w: string) => !!f?.locations.some((l) => containsTerm(w, l));
+  candidates.sort((a, b) => Number(inPlace(b.words)) - Number(inPlace(a.words)) || b.mod.localeCompare(a.mod) || a.i - b.i);
+  const pages = candidates.slice(0, opts.maxPages ?? 24);
+  const jobs: DiscoveredJob[] = [];
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(6, pages.length) }, async () => {
+    while (next < pages.length) {
+      const p = pages[next++];
+      try {
+        const found = jobsFromJsonLd(await getPublicText(p.loc, opts), p.loc, src);
+        jobs.push(...found.slice(0, 1).map((j) => ({ ...j, url: p.loc, applyUrl: j.applyUrl === j.url ? p.loc : j.applyUrl, id: `sitemap:${src.slug}:${p.loc}` })));
+      } catch { /* skip that page */ }
+    }
+  }));
+  return jobs;
+}
+

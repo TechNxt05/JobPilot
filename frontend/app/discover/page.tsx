@@ -126,7 +126,7 @@ export default function DiscoverPage() {
       <div>
         <h1 className="text-4xl">Discover jobs</h1>
         <p className="text-muted-foreground">
-          Open roles straight from companies&apos; own job boards (Greenhouse, Lever, Ashby, SmartRecruiters, Workable), ranked against your resume. No AI quota used.
+          Open roles straight from companies&apos; own job systems (Greenhouse, Lever, Ashby, Workday, Oracle, Eightfold, SmartRecruiters and more), Google, Amazon and Microsoft careers, and fresher-job sites like Talentd and InternDoor, ranked against your resume. No AI quota used.
         </p>
       </div>
 
@@ -274,6 +274,25 @@ function Boards({ settings, setSettings, result }: { settings: DiscoverySettings
   async function add(e: React.FormEvent) {
     e.preventDefault();
     setErr(null); setInfo(null);
+    // A company name ("JPMorgan", "Mastercard"), not a link: look for its job boards
+    if (!/[./]/.test(url.trim())) {
+      setChecking(true);
+      try {
+        const r = await fetch("/api/find-company", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: url.trim() }) });
+        const out = await r.json();
+        if (!r.ok) throw new Error(out.error ?? `Failed (${r.status})`);
+        const found = out.boards as { source: JobSource; jobs: number; sample: string[] }[];
+        if (!found.length) throw new Error(`No public job board found for “${url.trim()}”. Paste a link to one of its job postings or its careers page instead.`);
+        setSettings(withBoards(settings, found.map((f) => ({ ...f.source, company: name.trim() || f.source.company })), ""));
+        setInfo(`Added ${found.map((f) => `${ATS_LABELS[f.source.ats]} (${f.jobs} open, e.g. ${f.sample[0] ?? "…"})`).join("; ")}. Untick any that isn't the right company.`);
+        setUrl(""); setName("");
+      } catch (e2) {
+        setErr((e2 as Error).message);
+      } finally {
+        setChecking(false);
+      }
+      return;
+    }
     const src = sourceFromUrl(url);
     if (src) {
       setSettings(withBoards(settings, [src], name.trim()));
@@ -294,7 +313,7 @@ function Boards({ settings, setSettings, result }: { settings: DiscoverySettings
         if (!settings.pages.some((p) => p.url === out.url)) setSettings({ ...settings, pages: [...settings.pages, { url: out.url, company: label }] });
         setInfo(`Added. The page lists ${out.jobs} job${out.jobs === 1 ? "" : "s"} JobPilot can read.`);
       } else {
-        throw new Error("No job board or job data found on that page. It probably loads jobs with JavaScript. Open it in Chrome and use the JobPilot extension's Analyze, or find the company's Greenhouse / Lever / Ashby link.");
+        throw new Error("No job board or job data found on that page. It probably loads jobs with JavaScript. Open it in Chrome and use the JobPilot extension's Analyze, or paste a link from the company's job system (Greenhouse, Lever, Ashby, Workday, Oracle, Eightfold, Breezy, SmartRecruiters…).");
       }
       setUrl(""); setName("");
     } catch (e2) {
@@ -325,7 +344,7 @@ function Boards({ settings, setSettings, result }: { settings: DiscoverySettings
   return (
     <div className="border-t pt-4 space-y-3">
       <form onSubmit={add} className="flex flex-col md:flex-row gap-2">
-        <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Add a company: paste any careers page or job board link, e.g. https://company.com/careers" />
+        <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Add a company: type its name (e.g. JPMorgan) or paste a careers page / job link" />
         <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (optional)" className="md:max-w-48" />
         <Button type="submit" variant="outline" disabled={checking || !url.trim()}>{checking ? <Loader2 size={16} className="mr-1 animate-spin" /> : <Plus size={16} className="mr-1" />} Add</Button>
       </form>

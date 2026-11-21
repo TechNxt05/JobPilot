@@ -17,6 +17,7 @@ import {
   isProfileEmpty,
   knownAnswer,
   mergeProfile,
+  profileGains,
   profileFromResume,
   QUESTION_CATEGORIES,
   scoreATS,
@@ -101,8 +102,19 @@ export default function ProfilePage() {
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? `Failed (${res.status})`);
       const ex = body as NotesExtraction;
-      const { profile: merged, filled } = mergeNotes(latest.current, ex);
+      const before = latest.current;
+      const { profile: merged, filled } = mergeNotes(before, ex);
       await persist(merged);
+      // Longer notes (a full CV, a project list): also add the projects, jobs and papers they describe
+      if (notes.length >= 300) {
+        setStatus({ kind: "info", text: "Reading your notes for projects, jobs and papers…" });
+        const more = await fetch("/api/parse-resume", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: notes }) });
+        if (more.ok) {
+          const withEntries = mergeProfile(latest.current, await more.json());
+          filled.push(...profileGains(latest.current, withEntries).filter((g) => !/skill/.test(g)));
+          await persist(withEntries);
+        }
+      }
       const fresh = newLibraryEntries(ex.qa, await listAnswers().catch(() => []));
       for (const x of fresh) await saveAnswerRecord(x);
       if (fresh.length) setLibraryKey((k) => k + 1);

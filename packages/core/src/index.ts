@@ -21,3 +21,4 @@ export * from "./pdftext";
 export * from "./notes";
 export * from "./posts";
 export * from "./hrlists";
+export * from "./findcompany";

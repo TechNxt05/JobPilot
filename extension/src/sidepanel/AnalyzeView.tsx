@@ -14,6 +14,7 @@ import { send } from "../messages";
 import { TrackButton } from "./TrackButton";
 import { ApplyKit } from "./ApplyKit";
 import { CompanyContacts } from "./CompanyContacts";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { looksLikeApplicationForm, scanFields, type PageScan } from "../pageScan";
 
 const ALL_SITES = ["https://*/*", "http://*/*"];
@@ -124,7 +125,7 @@ export function AnalyzeView({ resumes, keySet, goTo, onScanned }: Props) {
               <button className="btn small" onClick={() => goTo("autofill")}>Open in Autofill</button>
             </div>
           )}
-          <CompanyContacts job={analysis.job} keySet={keySet} resumeId={selected?.resumeId} />
+          <ErrorBoundary label="Contacts" compact><CompanyContacts job={analysis.job} keySet={keySet} resumeId={selected?.resumeId} /></ErrorBoundary>
           <TrackButton job={analysis.job} score={selected?.alignment.overall ?? null} resumeName={selected?.resumeName} deadline={analysis.requirements.deadline} />
 
           {!resumes.length ? (

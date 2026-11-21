@@ -5,7 +5,7 @@
  *  - hnWhoIsHiring: the monthly Hacker News "Ask HN: Who is hiring?" thread, via the official Algolia API.
  *  - inspectCareersPage: any careers URL → the ATS boards it links to, plus jobs it publishes as schema.org JSON-LD.
  */
-import { htmlToText, sourceFromUrl, type DiscoveredJob, type JobSource } from "./discover";
+import { htmlToText, jobsFromJsonLd, sourceFromUrl, type DiscoveredJob, type JobSource } from "./discover";
 
 export interface HiringPost {
   id: string;
@@ -153,7 +153,6 @@ export interface CareersPageResult {
   company: string;
 }
 
-type Obj = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 
 /** Read a careers page: which ATS it uses (links / embeds) and any JobPosting structured data. */
@@ -166,41 +165,19 @@ export function inspectCareersPage(html: string, pageUrl: string): CareersPageRe
   const gh = html.match(/boards\.greenhouse\.io\/embed\/job_board\/js\?for=([A-Za-z0-9_-]+)/);
   if (gh) boards.set(`greenhouse:${gh[1].toLowerCase()}`, { ats: "greenhouse", slug: gh[1], company: gh[1] });
 
+  // Oracle Recruiting Cloud behind the company's own domain (jobs.hexaware.com/#en/sites/CX_1): the page script
+  // names the Oracle host, and the address (or page) names the site
+  const oracleHost = html.match(/https:\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)*\.oraclecloud\.com)/i)?.[1];
+  const oracleSite = `${pageUrl} ${html}`.match(/sites\/([A-Za-z0-9_]+)/)?.[1] ?? html.match(/siteNumber["':=\s]+["']?([A-Za-z0-9_]+)/)?.[1];
+  if (oracleHost && oracleSite) {
+    const o = sourceFromUrl(`https://${oracleHost}/hcmUI/CandidateExperience/en/sites/${oracleSite}/jobs`);
+    if (o) boards.set(`oracle:${o.slug.toLowerCase()}`, o);
+  }
+
   let host = "";
   try { host = new URL(pageUrl).hostname.replace(/^www\./, ""); } catch { /* keep empty */ }
   const titleCompany = str(html.match(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)/i)?.[1]) || host.split(".")[0];
-  const jobs: DiscoveredJob[] = [];
-  for (const m of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
-    let data: unknown;
-    try { data = JSON.parse(m[1].trim()); } catch { continue; }
-    const nodes: unknown[] = Array.isArray(data) ? data : (data as Obj)?.["@graph"] && Array.isArray((data as Obj)["@graph"]) ? ((data as Obj)["@graph"] as unknown[]) : [data];
-    for (const n of nodes) {
-      const o = (n ?? {}) as Obj;
-      const type = o["@type"];
-      if (!(type === "JobPosting" || (Array.isArray(type) && type.includes("JobPosting")))) continue;
-      const org = (o.hiringOrganization ?? {}) as Obj;
-      const place = ((Array.isArray(o.jobLocation) ? o.jobLocation[0] : o.jobLocation) ?? {}) as Obj;
-      const addr = (place.address ?? {}) as Obj;
-      const location = [str(addr.addressLocality), str(addr.addressRegion), str(addr.addressCountry)].filter(Boolean).join(", ");
-      const url = str(o.url) || pageUrl;
-      const title = str(o.title).trim();
-      if (!title) continue;
-      jobs.push({
-        id: `page:${host}:${str(o.identifier && (o.identifier as Obj).value) || title}`,
-        ats: "greenhouse", // placeholder: never fetched as a board; sourceLabel is what the UI shows
-        sourceLabel: "Careers page",
-        slug: host,
-        company: str(org.name) || titleCompany,
-        title,
-        location,
-        remote: str(o.jobLocationType).toUpperCase() === "TELECOMMUTE" ? true : null,
-        department: "",
-        url,
-        applyUrl: url,
-        postedAt: str(o.datePosted) || null,
-        text: htmlToText(str(o.description)),
-      });
-    }
-  }
+  for (const b of boards.values()) if (b.ats === "oracle" || b.ats === "workday" || b.ats === "eightfold") b.company = titleCompany || b.company;
+  const jobs = jobsFromJsonLd(html, pageUrl).map((j) => ({ ...j, company: j.company === host ? titleCompany : j.company }));
   return { boards: [...boards.values()], jobs, company: titleCompany };
 }

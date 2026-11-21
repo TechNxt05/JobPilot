@@ -214,7 +214,7 @@ const SKILLS: SkillDef[] = [
   { name: "Time Series", category: "ml", aliases: ["Time-Series Forecasting", "Forecasting"] },
   { name: "Feature Engineering", category: "ml" },
   { name: "Vector Databases", category: "ml", aliases: ["Vector Database", "Pinecone", "FAISS", "ChromaDB", "Weaviate"] },
-  { name: "Fine-tuning", category: "ml", aliases: ["Fine tuning", "LoRA"] },
+  { name: "Fine-tuning", category: "ml", aliases: ["Fine tuning", "Fine-tuned", "Fine tuned", "Finetuning", "Finetuned", "Fine-tune", "LoRA"] },
 
   // More cloud / DevOps
   { name: "AWS Lambda", category: "cloud", aliases: ["Serverless"] },
@@ -351,3 +351,24 @@ export function skillCategory(name: string): SkillCategory {
 }
 
 export const SKILL_COUNT = SKILLS.length;
+
+const PHRASE_STOP = new Set(["and", "for", "the", "with", "of", "in", "on", "to", "via", "using", "based", "systems", "system", "tools", "tool"]);
+/** "detection" → "detect", "tuning" → "tun", "classifiers" → "classifi": the part every form of a word shares. */
+const stem = (w: string) => w.replace(/(ations?|itions?|ions?|ings?|ers?|ed|es|s|ly|ive|al)$/, "") || w;
+
+/**
+ * A skill phrase the dictionary doesn't know ("Hallucination detection", "Agent evaluation") is in the profile when
+ * every meaningful word of it appears there in some form ("hallucination" … "detectors").
+ */
+export function phraseGrounded(phrase: string, sourceLower: string): boolean {
+  const words = phrase.toLowerCase().split(/[^a-z0-9+#]+/).filter((w) => w.length >= 3 && !PHRASE_STOP.has(w));
+  if (!words.length) return false;
+  const sourceWords = sourceLower.split(/[^a-z0-9+#]+/).filter(Boolean);
+  return words.every((w) => {
+    const st = stem(w);
+    return sourceWords.some((s) => s === w || (st.length >= 3 && s.startsWith(st)));
+  });
+}
+
+/** Whether a name is in the skill dictionary (otherwise it is matched by its words, see phraseGrounded). */
+export const isKnownSkill = (name: string) => BY_LOWER.has(canonicalSkill(name).toLowerCase());

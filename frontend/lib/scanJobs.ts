@@ -36,10 +36,12 @@ export async function scanJobs(input: {
   const [boards, pages] = await Promise.all([
     fetchBoards(activeSources(settings), {
       fetchImpl: cachedFetch,
-      concurrency: 10,
+      concurrency: 16,
       timeoutMs: 25_000,
       signal: AbortSignal.timeout(input.timeoutMs ?? 50_000),
       needsDetail: (j) => matchesFilters(j, filters),
+      filters,
+      maxPages: 12,
     }),
     // Careers pages not on a supported ATS: jobs they publish as schema.org JobPosting data
     Promise.all(settings.pages.map(async (p) => {

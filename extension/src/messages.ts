@@ -7,6 +7,7 @@ export type Request =
   | { type: "ai-quota" }
   | { type: "draft-answers"; questions: DraftQuestion[]; job: JobPosting | null; answers?: { question: string; answer: string }[] }
   | { type: "parse-resume"; resumeId: string }
+  | { type: "parse-profile-text"; text: string }
   | { type: "cover-letter"; job: Pick<JobPosting, "title" | "company" | "text">; resumeId?: string | null; tone?: CoverLetterTone; words?: number }
   | { type: "cold-email"; job: Pick<JobPosting, "title" | "url" | "text"> | null; contact: Pick<Contact, "name" | "company" | "title" | "department">; resumeId?: string | null }
   | { type: "tailor-resume"; job: Pick<JobPosting, "title" | "company" | "text">; resumeId?: string | null; latex?: string; shorten?: boolean; addSkills?: string[]; jobSkills?: string[] };

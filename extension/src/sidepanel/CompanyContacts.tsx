@@ -11,6 +11,7 @@ const SHOWN = 3;
 /** HR / recruiter emails JobPilot has for the job's company: your contact list first, then the shared HR lists. */
 export function CompanyContacts({ job, keySet, resumeId }: { job: JobPosting; keySet: boolean; resumeId?: string | null }) {
   const company = job.company?.trim() ?? "";
+  const subject = `Application: ${job.title ?? "open role"}${company ? ` at ${company}` : ""}`;
   const [state, setState] = useState<{ contacts: CompanyContact[]; signedIn: boolean } | null>(null);
   const [all, setAll] = useState(false);
   const [copied, setCopied] = useState("");
@@ -24,15 +25,33 @@ export function CompanyContacts({ job, keySet, resumeId }: { job: JobPosting; ke
     setOpen(c.email);
     setBusy(c.email);
     setErr((e) => ({ ...e, [c.email]: "" }));
-    const res = await send<{ subject: string; body: string; signature: string; warnings: string[] }>({
-      type: "cold-email",
-      job: job.text.length >= 80 ? { title: job.title, url: job.url, text: job.text } : null,
-      contact: { name: c.name, company, title: c.title, department: "" },
-      resumeId,
-    });
-    setBusy("");
-    if (!res.ok) return setErr((e) => ({ ...e, [c.email]: res.error }));
-    setDrafts((d) => ({ ...d, [c.email]: { subject: res.data.subject, body: `${res.data.body}\n\n${res.data.signature}`, warnings: res.data.warnings } }));
+    const fail = (message: string) => setErr((e) => ({ ...e, [c.email]: message }));
+    try {
+      const res = await send<{ subject?: unknown; body?: unknown; signature?: unknown; warnings?: unknown }>({
+        type: "cold-email",
+        job: job.text.length >= 80 ? { title: job.title, url: job.url, text: job.text } : null,
+        contact: { name: c.name, company, title: c.title, department: "" },
+        resumeId,
+      });
+      if (!res.ok) return fail(res.error);
+      // Check the reply's shape before drawing it: a malformed reply must show an error, not blank the panel
+      const d = res.data ?? {};
+      const body = typeof d.body === "string" ? d.body.trim() : "";
+      if (!body) return fail("The AI returned no email. Try again, or check Settings → AI.");
+      const signature = typeof d.signature === "string" ? d.signature : "";
+      setDrafts((all) => ({
+        ...all,
+        [c.email]: {
+          subject: typeof d.subject === "string" && d.subject.trim() ? d.subject : subject,
+          body: signature ? `${body}\n\n${signature}` : body,
+          warnings: Array.isArray(d.warnings) ? d.warnings.filter((w): w is string => typeof w === "string") : [],
+        },
+      }));
+    } catch (e) {
+      fail((e as Error).message || "Couldn't write the email.");
+    } finally {
+      setBusy("");
+    }
   }
 
   useEffect(() => {
@@ -59,7 +78,6 @@ export function CompanyContacts({ job, keySet, resumeId }: { job: JobPosting; ke
     setCopied(email);
     setTimeout(() => setCopied((c) => (c === email ? "" : c)), 1500);
   };
-  const subject = `Application: ${job.title ?? "open role"}${company ? ` at ${company}` : ""}`;
   const list = all ? state.contacts : state.contacts.slice(0, SHOWN);
 
   return (

@@ -257,7 +257,7 @@ Body layout: short paragraphs separated by blank lines.
    the work itself, never invented company facts.
 3. Evidence: the 2 projects / experiences most relevant to this role. One line each: what was built, the main tech,
    and a real result or number when the profile has one. Use each project's name exactly as written in the profile.
-4. Close: one clear, easy ask (consider me for the role / a 15-minute call / point me to the right person) and say the
+4. Close: one clear, easy ask (consider me for the role / a short call / point me to the right person) and say the
    resume is attached.
 
 Rules:

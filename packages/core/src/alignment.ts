@@ -1,6 +1,6 @@
 import type { JobRequirements } from "./job";
 import type { DegreeLevel, ResumeAnalysis } from "./resume";
-import { skillPatterns } from "./skills";
+import { isKnownSkill, phraseGrounded, skillPatterns } from "./skills";
 
 export type EvidenceStrength = "demonstrated" | "listed";
 
@@ -66,9 +66,12 @@ function strengthOf(line: string, resume: ResumeAnalysis): EvidenceStrength {
 /** Best resume line evidencing the skill (lines that show it in use win over skills-list mentions), or null. */
 export function findEvidence(skill: string, resume: ResumeAnalysis): { line: string; strength: EvidenceStrength } | null {
   const patterns = skillPatterns(skill);
-  const candidates = resume.skills.get(skill)?.lines.length
+  let candidates = resume.skills.get(skill)?.lines.length
     ? [...resume.skills.get(skill)!.lines, ...resume.lines.filter((l) => patterns.some((p) => p.test(l)))]
     : resume.lines.filter((l) => patterns.some((p) => p.test(l)));
+  // A requirement the skill dictionary doesn't know ("Vector DB", "AI Agents") counts when one line holds every word
+  // of it in some form: "vector search", "7-agent LangGraph workflow"
+  if (!candidates.length && !isKnownSkill(skill)) candidates = resume.lines.filter((l) => phraseGrounded(skill, l.toLowerCase()));
   if (!candidates.length) return null;
   const demonstrated = candidates.find((l) => strengthOf(l, resume) === "demonstrated");
   return demonstrated ? { line: demonstrated, strength: "demonstrated" } : { line: candidates[0], strength: "listed" };

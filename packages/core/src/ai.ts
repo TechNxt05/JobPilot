@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { JobPosting, JobRequirements } from "./job";
 import { normalizeSkillList } from "./job";
 import type { DegreeLevel } from "./resume";
-import type { CandidateProfile } from "./profile";
+import { EMPTY_PROFILE, mergeProfile, type CandidateProfile } from "./profile";
 import { completeParsed, looseArray, looseStrings, looseText, parseJSONLoose, ProviderError, type AIConfig, type CompleteOptions } from "./providers";
 
 const nullableNumber = z.union([z.number(), z.string().transform((s) => (s.trim() === "" ? null : Number(s)))]).nullable().optional()
@@ -346,4 +346,29 @@ export async function parseResumeWithAI(
     publications: d.publications.filter((p) => inResume(p.title)),
     skills: d.skills.map((x) => x.trim()).filter(Boolean),
   };
+}
+
+/**
+ * A long CV, portfolio write-up or profile document → profile fields. Read in sections (each well inside the model's
+ * input and output limits) and merged: the same project or job seen in two sections is kept once, with its details
+ * combined. Entries whose names aren't in the text are dropped, as with a resume.
+ */
+export async function parseProfileText(
+  ai: AIConfig,
+  text: string,
+  opts: Pick<CompleteOptions, "fetchImpl" | "signal"> = {},
+): Promise<Partial<CandidateProfile>> {
+  const SECTION = 7000;
+  const chunks: string[] = [];
+  let cur = "";
+  for (const line of text.split("\n")) {
+    if (cur.length + line.length + 1 > SECTION && cur.trim()) { chunks.push(cur); cur = ""; }
+    cur += `${line}\n`;
+  }
+  if (cur.trim()) chunks.push(cur);
+  let merged = { ...EMPTY_PROFILE };
+  // One section at a time: free-tier providers count tokens per minute
+  for (const chunk of chunks.slice(0, 6)) merged = mergeProfile(merged, await parseResumeWithAI(ai, chunk, opts));
+  const { updatedAt: _u, answers: _a, ...fields } = merged;
+  return fields;
 }

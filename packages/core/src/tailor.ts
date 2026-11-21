@@ -6,7 +6,7 @@ import { escapeLatex, escapeUrl, latexPreamble, latexToText } from "./latex";
 import { profileToContext, type CandidateProfile } from "./profile";
 import { completeParsed, looseArray, looseStrings, looseText, parseJSONLoose, ProviderError, type AIConfig, type CompleteOptions } from "./providers";
 import { analyzeResume } from "./resume";
-import { canonicalSkill, findSkills, skillCategory, skillPatterns, type SkillCategory } from "./skills";
+import { canonicalSkill, findSkills, phraseGrounded, skillCategory, skillPatterns, type SkillCategory } from "./skills";
 
 /* ------------------------------ Grounding checks ------------------------------ */
 
@@ -174,7 +174,12 @@ function assemble(
       items: g.items.map((i) => i.trim()).filter((i) => {
         if (!i) return false;
         const known = [...findSkills(i).keys()];
-        const ok = sourceLower.includes(i.toLowerCase()) || (known.length > 0 && known.every((k) => sourceSkills.has(k)));
+        // "AWS SageMaker": AWS being in the profile doesn't vouch for SageMaker. What's left once the known skills are
+        // taken out must be in the profile too
+        const rest = known.reduce((t, k) => skillPatterns(k).reduce((x, p) => x.replace(new RegExp(p.source, `${p.flags.replace("g", "")}g`), " "), t), i);
+        const restOk = !/[a-z]{3,}/i.test(rest) || phraseGrounded(rest, sourceLower);
+        const ok = sourceLower.includes(i.toLowerCase()) || (known.length > 0 && known.every((k) => sourceSkills.has(k)) && restOk) ||
+          (known.length === 0 && phraseGrounded(i, sourceLower));
         if (!ok) removed.push({ text: i, reason: "skill not in your profile" });
         return ok;
       }),
@@ -828,6 +833,11 @@ export async function tailorLatex(
   const pre = latexPreamble(input.latex);
   if (pre && latexPreamble(latex) !== pre) latex = pre + latex.slice(latex.indexOf("\\begin{document}"));
 
+  // Skills the job needs that the profile shows, and skills the candidate ticked: put any the model left out into the
+  // resume's skills row (only when that row can be found; otherwise the warning below asks the candidate to)
+  const wanted = [...new Set([...findSkills(input.job.text).keys()].filter((k) => findSkills(source).has(k)).concat(approved))];
+  latex = ensureSkillsInLatex(latex, wanted).latex;
+
   const newText = latexToText(latex);
   const warnings = [
     ...ungroundedNumbers(newText, source).map((n) => `New number “${n}” isn't in your resume or profile. Check or remove it.`),
@@ -841,7 +851,7 @@ export async function tailorLatex(
   const left = [...new Set([...jobSkills.filter((k) => srcSkills.has(k)), ...approved.map(canonicalSkill)])].filter((k) => !inNew.has(k) && !newLower.includes(k.toLowerCase()));
   if (left.length) {
     const them = left.length > 1 ? "them" : "it";
-    warnings.push(`The job asks for ${left.join(", ")} and your profile shows ${them}, but the tailored resume doesn't mention ${them}. Add ${them} to your Skills section.`);
+    warnings.push(`The job asks for ${left.join(", ")} and your profile shows ${them}, but JobPilot couldn't find your resume's skills row to add ${them}. Add ${them} to your Skills section.`);
   }
   return {
     latex,
@@ -883,4 +893,45 @@ export async function compileOnePage(
     pages = await countPages(pdf);
   }
   return { resume: current, latex, pdf, pages };
+}
+
+/* ------------------------------ skills the candidate ticked ------------------------------ */
+
+const onResume = (text: string, skill: string) => skillPatterns(skill).some((p) => p.test(text));
+
+/**
+ * Make sure every skill the candidate ticked is in the tailored resume's Skills section, whatever the model did:
+ * the missing ones go into the row they fit. Returns the resume and the skills that had to be put back.
+ */
+export function ensureSkills(r: TailoredResume, skills: string[]): { resume: TailoredResume; inserted: string[] } {
+  const groups = r.skills.map((g) => ({ ...g, items: [...g.items] }));
+  const text = groups.map((g) => `${g.category}: ${g.items.join(", ")}`).join("\n");
+  const inserted = [...new Set(skills.map((s) => s.trim()).filter(Boolean))].filter((s) => !onResume(text, s));
+  for (const s of inserted) insertSkill(groups, s);
+  return { resume: { ...r, skills: groups }, inserted };
+}
+
+/**
+ * The same for a pasted LaTeX resume: missing ticked skills are appended to the skills row they fit best (the row
+ * already listing the most skills, inside the Skills section when there is one). Returns the LaTeX and what went in.
+ */
+export function ensureSkillsInLatex(latex: string, skills: string[]): { latex: string; inserted: string[] } {
+  const plain = latexToText(latex);
+  const missing = [...new Set(skills.map((s) => s.trim()).filter(Boolean))].filter((s) => !onResume(plain, s));
+  if (!missing.length) return { latex, inserted: [] };
+  const lines = latex.split("\n");
+  const skillsAt = lines.findIndex((l) => /\\(sub)?section\*?\{[^}]*skill/i.test(l));
+  // A skills row: a comma list naming several known skills, ideally after the Skills heading
+  const rows = lines
+    .map((l, i) => ({ i, hits: findSkills(latexToText(l)).size, commas: (l.match(/,/g) ?? []).length }))
+    .filter((x) => x.commas >= 2 && x.hits >= 2 && !lines[x.i].trim().startsWith("%"))
+    .sort((a, b) => Number(b.i > skillsAt && skillsAt >= 0) - Number(a.i > skillsAt && skillsAt >= 0) || b.hits - a.hits);
+  const row = rows[0];
+  if (!row) return { latex, inserted: [] };
+  const line = lines[row.i];
+  // After the list's last item: before a closing "}" / "\\" / end of line
+  const end = line.search(/\s*(\}\s*)?(\\\\)?\s*(%.*)?$/);
+  const at = end > 0 ? end : line.length;
+  lines[row.i] = `${line.slice(0, at)}, ${missing.map(escapeLatex).join(", ")}${line.slice(at)}`;
+  return { latex: lines.join("\n"), inserted: missing };
 }

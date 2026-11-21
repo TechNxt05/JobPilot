@@ -185,19 +185,35 @@ export function mergeProfile(base: CandidateProfile, incoming: Partial<Candidate
   const scalars = ["firstName", "lastName", "email", "phone", "city", "country", "linkedin", "github", "portfolio", "headline", "summary", "additionalInfo"] as const;
   for (const k of scalars) if (!out[k].trim() && incoming[k]?.trim()) out[k] = incoming[k]!.trim();
 
-  const addEntries = <T extends object>(have: T[], more: T[] | undefined, key: (e: T) => string) => {
+  const addEntries = <T extends object>(have: T[], more: T[] | undefined, key: (e: T) => string, same?: (a: T, b: T) => boolean) => {
     const seen = new Set(have.map(key).filter((k) => k.replace(/\|/g, "")));
     for (const e of more ?? []) {
       const k = key(e);
-      if (!k.replace(/\|/g, "") || seen.has(k)) continue;
+      if (!k.replace(/\|/g, "") || seen.has(k) || (same && have.some((h) => same(h, e)))) continue;
       seen.add(k);
       have.push({ ...e });
     }
   };
   addEntries(out.education, incoming.education, LIST_KEYS.education);
-  addEntries(out.experience, incoming.experience, LIST_KEYS.experience);
+  // A job or project we already have: add the description lines that are new (the AuditAI classifier from a longer
+  // CV), skip near-repeats of lines we have, and fill its empty fields. Nothing the user wrote is changed.
+  const enrich = <T extends { description: string }>(have: T[], more: T[] | undefined, key: (e: T) => string, fields: (keyof T)[], same?: (a: T, b: T) => boolean) => {
+    for (const e of more ?? []) {
+      const mine = have.find((h) => key(h) === key(e) || (same?.(h, e) ?? false));
+      if (!mine) continue;
+      const lines = mine.description.split("\n").map((l) => l.trim()).filter(Boolean);
+      for (const l of e.description.split("\n").map((x) => x.trim()).filter(Boolean)) {
+        if (!lines.some((x) => nearSameLine(x, l))) lines.push(l);
+      }
+      mine.description = lines.join("\n");
+      for (const f of fields) if (!String(mine[f] ?? "").trim() && String(e[f] ?? "").trim()) mine[f] = e[f];
+    }
+  };
+  enrich(out.experience, incoming.experience, LIST_KEYS.experience, ["location", "start", "end"], sameJob);
+  enrich(out.projects, incoming.projects, LIST_KEYS.projects, ["tech", "link"]);
+  addEntries(out.experience, incoming.experience, LIST_KEYS.experience, sameJob);
   addEntries(out.projects, incoming.projects, LIST_KEYS.projects);
-  addEntries(out.publications, incoming.publications, LIST_KEYS.publications);
+  addEntries(out.publications, incoming.publications, LIST_KEYS.publications, (a, b) => nearSameLine(a.title, b.title));
   // Fill a missing link on an entry we already had
   for (const p of out.projects) if (!p.link) p.link = incoming.projects?.find((q) => LIST_KEYS.projects(q) === LIST_KEYS.projects(p))?.link ?? "";
 
@@ -210,11 +226,42 @@ export function mergeProfile(base: CandidateProfile, incoming: Partial<Candidate
       have.push(s.trim());
     }
   };
-  addStrings(out.skills, incoming.skills);
+  // Skills by their standard name: "Tailwind" = "Tailwind CSS"; a combined entry ("AWS EC2") is skipped when its
+  // parts are already listed
+  const skillKey = (x: string) => canonicalSkill(x).toLowerCase();
+  const haveSkills = new Set(out.skills.map(skillKey));
+  for (const raw of incoming.skills ?? []) {
+    const x = raw.trim();
+    const k = skillKey(x);
+    if (!x || haveSkills.has(k)) continue;
+    const parts = [...findSkills(x).keys()].map((p) => p.toLowerCase());
+    if (parts.length > 1 && parts.every((p) => haveSkills.has(p))) continue;
+    haveSkills.add(k);
+    out.skills.push(x);
+  }
   addStrings(out.certifications, incoming.certifications);
   addStrings(out.achievements, incoming.achievements);
   for (const [id, a] of Object.entries(incoming.answers ?? {})) if (!out.answers[id]?.trim() && a.trim()) out.answers[id] = a;
   return out;
+}
+
+const COMPANY_FILLER = new Set(["research", "development", "centre", "center", "organisation", "organization", "and", "the", "of", "india",
+  "private", "pvt", "limited", "ltd", "inc", "llc", "technologies", "technology", "solutions", "services", "software", "labs", "lab", "group", "remote"]);
+/** The same job: same title, and the company names share a distinctive word or acronym ("… (DRDO)" = "DRDO, RCI"). */
+function sameJob(a: ExperienceEntry, b: ExperienceEntry): boolean {
+  if (entryKey(a.title) !== entryKey(b.title)) return false;
+  const words = (s: string) => new Set(s.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1 && !COMPANY_FILLER.has(w)));
+  const A = words(a.company), B = words(b.company);
+  return [...A].some((w) => B.has(w));
+}
+
+/** Two description lines saying the same thing: most words of the shorter one are in the longer one. */
+function nearSameLine(a: string, b: string): boolean {
+  const words = (s: string) => new Set(s.toLowerCase().replace(/^[•\-*\s]+/, "").split(/[^a-z0-9+#.%]+/).filter((w) => w.length > 2));
+  const A = words(a), B = words(b);
+  const [small, big] = A.size <= B.size ? [A, B] : [B, A];
+  if (!small.size) return true;
+  return [...small].filter((w) => big.has(w)).length / small.size >= 0.7;
 }
 
 export function isProfileEmpty(p: CandidateProfile): boolean {
@@ -532,3 +579,19 @@ export const BASIC_FIELDS: { key: keyof Pick<CandidateProfile, "firstName" | "la
   { key: "github", label: "GitHub URL", wide: true },
   { key: "portfolio", label: "Portfolio / website / deployed app", wide: true },
 ];
+
+/** What a merge added, for a status line: ["20 projects", "1 job", "15 skills", "new details on 2 entries"]. */
+export function profileGains(before: CandidateProfile, after: CandidateProfile): string[] {
+  const n = (count: number, one: string, many: string) => (count > 0 ? `${count} ${count === 1 ? one : many}` : "");
+  const lines = (xs: { description: string }[]) => xs.map((x) => x.description.split("\n").filter((l) => l.trim()).length);
+  const grew = (a: { description: string }[], b: { description: string }[]) => lines(a).filter((len, i) => (lines(b)[i] ?? 0) > len).length;
+  return [
+    n(after.projects.length - before.projects.length, "project", "projects"),
+    n(after.experience.length - before.experience.length, "job", "jobs"),
+    n(after.publications.length - before.publications.length, "publication", "publications"),
+    n(after.education.length - before.education.length, "education entry", "education entries"),
+    n(after.skills.length - before.skills.length, "skill", "skills"),
+    n(after.certifications.length - before.certifications.length, "certification", "certifications"),
+    n(grew(before.projects, after.projects) + grew(before.experience, after.experience), "existing entry given new details", "existing entries given new details"),
+  ].filter(Boolean);
+}

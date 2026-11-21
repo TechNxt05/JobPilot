@@ -6,6 +6,7 @@ import {
   generateColdEmail,
   generateCoverLetter,
   normalizeProfile,
+  parseProfileText,
   parseResumeWithAI,
   profileToContext,
   tailorLatex,
@@ -27,6 +28,7 @@ export const maxDuration = 120;
  * POST { task: "analyze", job, resumes }        → JobAnalysis
  * POST { task: "draft-answers", questions, job?, profile, resumeText, answers? }
  * POST { task: "parse-resume", text }
+ * POST { task: "parse-profile", text }        (a long CV / profile document, read in sections)
  * POST { task: "cover-letter", job, profile, resumeText, tone?, words? }
  * POST { task: "tailor-resume", job, profile, resumeText, latex?, shorten?, addSkills?, jobSkills? }
  * POST { task: "cold-email", job?, contact: { name, company, title, department }, profile, resumeText }
@@ -77,6 +79,11 @@ export async function POST(req: Request) {
         if (!profile.firstName && !resumeText) return json({ error: "Upload a resume or fill in your Profile first. The email is written from it." }, 400);
         const coldJob = job.text.length >= 80 ? { title: job.title, url: job.url, text: job.text } : null;
         return json(await generateColdEmail(ai, { profile, resumeText, contact, job: coldJob }), 200, headers);
+      }
+      case "parse-profile": {
+        const text = str(body.text, 40000);
+        if (text.length < 100) return json({ error: "Paste a little more text (at least a few lines)." }, 400);
+        return json(await parseProfileText(ai, text), 200, headers);
       }
       case "parse-resume": {
         const text = str(body.text, 20000);

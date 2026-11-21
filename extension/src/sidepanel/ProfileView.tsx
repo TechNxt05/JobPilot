@@ -11,6 +11,7 @@ import {
   knownAnswer,
   mergeProfile,
   profileFromResume,
+  profileGains as profileGainsOf,
   QUESTION_CATEGORIES,
   type CandidateProfile,
   type SavedAnswer,
@@ -28,6 +29,8 @@ export function ProfileView({ resumes, keySet }: { resumes: StoredResume[]; keyS
   const [status, setStatus] = useState<Status>(null);
   const [aiDrafted, setAiDrafted] = useState<Set<string>>(new Set());
   const [drafting, setDrafting] = useState(false);
+  const [moreText, setMoreText] = useState("");
+  const [readingText, setReadingText] = useState(false);
   const latest = useRef(profile);
   latest.current = profile;
 
@@ -73,6 +76,24 @@ export function ProfileView({ resumes, keySet }: { resumes: StoredResume[]; keyS
     setStatus({ kind: "ok", text: `Filled from “${r.name}”, with AI filling the gaps. Review each section below.` });
   }
 
+  /** A longer CV, portfolio write-up or profile document → projects, jobs, papers and skills the profile lacks. */
+  async function addFromText() {
+    const text = moreText.trim();
+    if (text.length < 100) return setStatus({ kind: "error", text: "Paste a little more text (at least a few lines)." });
+    setReadingText(true);
+    setStatus({ kind: "info", text: "Reading the text… (long documents are read in sections, so this can take a minute)" });
+    // Merge into the saved profile, so save pending edits first
+    if (dirty) await persist(profile);
+    const res = await send<Partial<CandidateProfile>>({ type: "parse-profile-text", text });
+    setReadingText(false);
+    if (!res.ok) return setStatus({ kind: "error", text: res.error });
+    const before = latest.current;
+    const after = await persist(mergeProfile(before, res.data));
+    const gains = profileGainsOf(before, after);
+    setMoreText("");
+    setStatus({ kind: "ok", text: gains.length ? `Added ${gains.join(", ")}. Nothing you'd written was changed. Review the sections below.` : "Nothing new: your profile already has everything in that text." });
+  }
+
   async function draftBlankAnswers() {
     const blank = COMMON_QUESTIONS.filter((q) => q.ai && !knownAnswer(q, profile));
     if (!blank.length) return setStatus({ kind: "info", text: "Every AI-answerable question already has an answer." });
@@ -92,7 +113,16 @@ export function ProfileView({ resumes, keySet }: { resumes: StoredResume[]; keyS
     <div className="stack profile">
       {resumes.length === 0 && <Onboarding keySet={keySet} />}
       <ResumesView resumes={resumes} onAdded={onResumeAdded} />
-      {status && <div className={`card ${status.kind === "error" ? "error" : status.kind === "ok" ? "ok" : "subtle"}`}><p className="small">{status.text}</p></div>}
+      <details className="card">
+        <summary><strong>Add details from text</strong> <span className="muted small">· a full CV, portfolio write-up or project list</span></summary>
+        <p className="muted small">Your one-page resume leaves things out. Paste anything longer: JobPilot adds the projects, jobs, papers and skills your profile doesn&apos;t have yet, and new details to the ones it has. Tailoring and cover letters can then use them.</p>
+        <textarea rows={8} value={moreText} placeholder="Paste text here" onChange={(e) => setMoreText(e.target.value)} />
+        <div className="row gap">
+          <button className="btn small primary" onClick={addFromText} disabled={readingText || !keySet || moreText.trim().length < 100}>{readingText ? "Reading…" : "Add to profile"}</button>
+          {!keySet && <span className="muted small">Turn on AI in Settings to use this.</span>}
+        </div>
+      </details>
+      {status &&<div className={`card ${status.kind === "error" ? "error" : status.kind === "ok" ? "ok" : "subtle"}`}><p className="small">{status.text}</p></div>}
 
       <Section title="Basics" open>
         <div className="grid2">

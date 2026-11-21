@@ -7,6 +7,7 @@ import {
   generateColdEmail,
   generateCoverLetter,
   pickResumeForJob,
+  parseProfileText,
   parseResumeWithAI,
   profileToContext,
   PROVIDERS,
@@ -63,6 +64,11 @@ async function handle(msg: Request) {
       const resume = (await getResumes()).find((r) => r.id === msg.resumeId);
       if (!resume) throw new Error("Resume not found");
       return runAI("parse-resume", { text: resume.text }, (ai) => parseResumeWithAI(ai, resume.text));
+    }
+    case "parse-profile-text": {
+      const text = msg.text.slice(0, 40000);
+      if (text.trim().length < 100) throw new Error("Paste a little more text (at least a few lines).");
+      return runAI("parse-profile", { text }, (ai) => parseProfileText(ai, text));
     }
     case "cover-letter": {
       const { profile, resumeText } = await profileAndResume(msg.resumeId);

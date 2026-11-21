@@ -3,6 +3,8 @@ import {
   addSkillsToProfile,
   analyzeResume,
   compileLatex,
+  ensureSkills,
+  ensureSkillsInLatex,
   computeAlignment,
   latexToText,
   resumeText,
@@ -170,7 +172,10 @@ export function ApplyKit({ job, jobSkills = [], missingSkills, requirements, res
     const allJobSkills = jobSkillList(job.text, jobSkills);
     const res = await send<TailorResult>({ type: "tailor-resume", job: jobInfo, resumeId, latex: latexIn.trim() || undefined, addSkills, jobSkills: allJobSkills });
     if (!res.ok) { setTailorBusy(""); return setTailorErr(res.error); }
-    let result = res.data;
+    // Every ticked skill must be on the resume, whatever the AI (or an older server) returned
+    const withTicked = (r: TailorResult): TailorResult =>
+      r.mode === "profile" ? { ...r, resume: ensureSkills(r.resume, addSkills).resume } : { ...r, latex: ensureSkillsInLatex(r.latex, addSkills).latex };
+    let result = withTicked(res.data);
     try {
       setTailorBusy("Compiling PDF…");
       if (result.mode === "profile") {
@@ -186,6 +191,7 @@ export function ApplyKit({ job, jobSkills = [], missingSkills, requirements, res
           setTailorBusy("Over one page: shortening…");
           const again = await send<TailorResult>({ type: "tailor-resume", job: jobInfo, resumeId, latex: result.latex, shorten: true, addSkills, jobSkills: allJobSkills });
           if (again.ok && again.data.mode === "latex") {
+            again.data = withTicked(again.data) as typeof again.data;
             const c2 = await compileLatex(again.data.latex);
             const p2 = await pdfPageCount(c2.pdf);
             if (p2 <= pages) { result = again.data; compiled = c2; pages = p2; }
@@ -319,7 +325,8 @@ export function ApplyKit({ job, jobSkills = [], missingSkills, requirements, res
             </div>
             {warnings.length > 0 && <ul className="plain small warn-text">{warnings.map((w) => <li key={w}>⚠ {w}</li>)}</ul>}
             {report.removed.length > 0 && (
-              <details><summary>{report.removed.length} invented detail{report.removed.length > 1 ? "s" : ""} removed</summary>
+              <details><summary>{report.removed.length} detail{report.removed.length > 1 ? "s" : ""} left out of this resume (not found in your profile)</summary>
+                <p className="hint">Only this tailored resume. Your profile is unchanged. If you do have it, add it in Profile (or tick it above) and tailor again.</p>
                 <ul className="plain small">{report.removed.map((r, i) => <li key={i}>“{r.text}”: {r.reason}</li>)}</ul></details>
             )}
             {(report.addedSkills ?? []).length > 0 && (
