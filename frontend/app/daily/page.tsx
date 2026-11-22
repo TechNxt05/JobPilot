@@ -28,6 +28,7 @@ export default function DailyJobsPage() {
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<Tab>("todo");
   const [hideBlocked, setHideBlocked] = useState(true);
+  const [day, setDay] = useState("all");
 
   async function reload() {
     try {
@@ -88,7 +89,17 @@ export default function DailyJobsPage() {
   }
 
   const counts = useMemo(() => Object.fromEntries(TABS.map((t) => [t.id, (jobs ?? []).filter((j) => t.has.includes(j.status)).length])) as Record<Tab, number>, [jobs]);
-  const shown = (jobs ?? []).filter((j) => TABS.find((t) => t.id === tab)!.has.includes(j.status) && (!hideBlocked || tab !== "todo" || !j.job.flags.some((f) => f.severity === "blocker")));
+  const inTab = useMemo(() => (jobs ?? []).filter((j) => TABS.find((t) => t.id === tab)!.has.includes(j.status) && (!hideBlocked || tab !== "todo" || !j.job.flags.some((f) => f.severity === "blocker"))), [jobs, tab, hideBlocked]);
+  // One group per day: the day of the email the job was in, else the day it was found. Newest day first, best job first
+  const groups = useMemo(() => {
+    const by = new Map<string, AgentJob[]>();
+    for (const a of inTab) by.set(dayOf(a), [...(by.get(dayOf(a)) ?? []), a]);
+    const fit = (a: AgentJob) => a.job.aiScore ?? a.job.score ?? a.score ?? -1;
+    return [...by.entries()].sort((x, y) => y[0].localeCompare(x[0])).map(([d, list]) => ({ day: d, jobs: [...list].sort((x, y) => fit(y) - fit(x)) }));
+  }, [inTab]);
+  const days = groups.map((g) => g.day);
+  const shownGroups = day === "all" ? groups : groups.filter((g) => g.day === day);
+  const shown = shownGroups.flatMap((g) => g.jobs);
 
   return (
     <div className="container mx-auto p-6 max-w-5xl space-y-6">
@@ -119,7 +130,13 @@ export default function DailyJobsPage() {
             </button>
           ))}
         </div>
-        {tab === "todo" && <label className="inline-flex items-center gap-2 pb-2 text-xs text-muted-foreground"><input type="checkbox" checked={hideBlocked} onChange={(e) => setHideBlocked(e.target.checked)} /> Hide jobs you likely can&apos;t apply to</label>}
+        <div className="flex flex-wrap items-center gap-3 pb-2">
+          <select value={days.includes(day) ? day : "all"} onChange={(e) => setDay(e.target.value)} aria-label="Show jobs from" className="h-8 rounded-[3px] border border-input bg-card px-2 text-xs">
+            <option value="all">All dates</option>
+            {groups.map((g) => <option key={g.day} value={g.day}>{dayLabel(g.day)} ({g.jobs.length})</option>)}
+          </select>
+          {tab === "todo" && <label className="inline-flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={hideBlocked} onChange={(e) => setHideBlocked(e.target.checked)} /> Hide jobs you can&apos;t apply to or that aren&apos;t your field</label>}
+        </div>
       </div>
 
       {jobs === null ? (
@@ -127,12 +144,45 @@ export default function DailyJobsPage() {
       ) : shown.length === 0 ? (
         <p className="text-sm text-muted-foreground">{tab === "todo" ? (jobs.length ? "All caught up." : "No jobs yet. Press Check now, or turn on the daily check below.") : "Nothing here."}</p>
       ) : (
-        <ul className="space-y-3">
-          {shown.map((a) => <JobCard key={a.key} a={a} onApply={() => apply(a)} onApplied={() => mark(a, "applied")} onDismiss={() => mark(a, a.status === "dismissed" ? "new" : "dismissed")} onTailor={() => tailor(a)} />)}
-        </ul>
+        <div className="space-y-6">
+          {shownGroups.map((g) => {
+            const emailed = g.jobs.filter((a) => a.emailedAt).length;
+            return (
+              <section key={g.day} className="space-y-3" aria-label={dayLabel(g.day)}>
+                <div className="flex items-center gap-3">
+                  <h2 className="font-narrow text-[13px] font-semibold uppercase tracking-[0.08em] whitespace-nowrap">{dayLabel(g.day)}</h2>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {g.jobs.length} job{g.jobs.length === 1 ? "" : "s"}{emailed ? ` · ${emailed} in that day's email` : ""}
+                  </span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+                <ul className="space-y-3">
+                  {g.jobs.map((a) => <JobCard key={a.key} a={a} onApply={() => apply(a)} onApplied={() => mark(a, "applied")} onDismiss={() => mark(a, a.status === "dismissed" ? "new" : "dismissed")} onTailor={() => tailor(a)} />)}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
       )}
     </div>
   );
+}
+
+/** The local day a job belongs to: the day of the email it was in, else the day it was found (YYYY-MM-DD). */
+function dayOf(a: AgentJob): string {
+  const d = new Date(a.emailedAt ?? a.firstSeenAt);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** "Today · Mon 23 Nov", "Yesterday · Sun 22 Nov", "Fri 20 Nov 2026". */
+function dayLabel(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diff = Math.round((today.getTime() - date.getTime()) / 86_400_000);
+  const label = date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", ...(y !== today.getFullYear() ? { year: "numeric" } : {}) });
+  return diff === 0 ? `Today · ${label}` : diff === 1 ? `Yesterday · ${label}` : label;
 }
 
 function SettingsCard({ settings, saving, onSave }: { settings: AgentSettings; saving: boolean; onSave: (s: AgentSettings) => void }) {
