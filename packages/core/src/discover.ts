@@ -7,6 +7,7 @@
  *
  * Pure parsing is separate from fetching, so it is testable offline.
  */
+import { findSkills, isKnownSkill, phraseGrounded, skillCategory } from "./skills";
 import { jobKey } from "./sync";
 
 export type AtsId = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "workable" | "recruitee" | "workday" | "oracle" | "eightfold" | "breezy" | "google" | "amazon" | "sitemap";
@@ -632,7 +633,44 @@ export function dedupeJobs(jobs: DiscoveredJob[]): DiscoveredJob[] {
 
 /* ------------------------------ fit flags ------------------------------ */
 
-export type FitFlagKind = "eligibility" | "experience" | "work_authorization" | "location" | "seniority" | "student_only";
+export type FitFlagKind = "eligibility" | "experience" | "work_authorization" | "location" | "seniority" | "student_only" | "field";
+
+/* ------------------------------ is this job in the candidate's field? ------------------------------ */
+
+/** Skills nearly every engineering job lists: alone they don't make a role yours (Python for a CPU-verification job). */
+const COMMON_SKILLS = new Set(["git", "linux", "sql", "excel", "jira", "agile", "html", "css", "data structures", "algorithms", "oop",
+  "microsoft office", "windows", "communication", "problem solving", "testing", "debugging", "unix", "shell scripting", "bash", "github",
+  // Buzzwords half of all postings mention ("leveraging AI"): real AI / ML roles also name their tools (PyTorch, RAG, LLMs)
+  "artificial intelligence", "machine learning", "data analysis"]);
+const isCommonSkill = (s: string) => skillCategory(s) === "language" || COMMON_SKILLS.has(s.toLowerCase());
+
+/** Titles of software, AI / ML and data roles. */
+export const TECH_ROLE = /\b(software|sde|swe|developer|programmer|back[- ]?end|front[- ]?end|full[- ]?stack|web|mobile|android|ios|ai|ml|machine learning|deep learning|gen ?ai|generative|llm|nlp|computer vision|data (scien\w*|engineer\w*|analyst)|analytics engineer|applied scien\w*|research engineer|mlops|devops|platform|cloud|site reliability|sre|python|forward deployed|automation engineer|qa engineer|sdet|api)\b/i;
+
+export interface Relevance {
+  relevant: boolean;
+  /** The job's specialist skills you have / don't have (languages and everyday tools left out) */
+  matched: string[];
+  missing: string[];
+}
+
+/**
+ * Whether a job is in the candidate's field, from the skills it names and its title. A job is relevant when you
+ * have at least two of its specialist skills, or it is a software / AI / data role and you have one of them (or two
+ * of its skills of any kind, or it names none). Everyday languages and tools never decide it on their own.
+ */
+export function jobRelevance(job: { title: string; text: string }, jobSkills: string[], candidateText: string): Relevance {
+  const all = [...new Set([...jobSkills, ...findSkills(`${job.title}\n${job.text}`).keys()])];
+  const candidate = findSkills(candidateText);
+  const lower = candidateText.toLowerCase();
+  const has = (s: string) => candidate.has(s) || (!isKnownSkill(s) && phraseGrounded(s, lower));
+  const core = all.filter((s) => !isCommonSkill(s));
+  const matched = core.filter(has);
+  const anyMatched = all.filter(has).length;
+  const techTitle = TECH_ROLE.test(job.title);
+  const relevant = matched.length >= 2 || (techTitle && (matched.length >= 1 || anyMatched >= 2 || all.length === 0));
+  return { relevant, matched, missing: core.filter((s) => !has(s)) };
+}
 
 export interface FitFlag {
   kind: FitFlagKind;

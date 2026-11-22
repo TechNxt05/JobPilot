@@ -22,3 +22,4 @@ export * from "./notes";
 export * from "./posts";
 export * from "./hrlists";
 export * from "./findcompany";
+export * from "./jobrank";

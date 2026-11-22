@@ -86,7 +86,7 @@ Intergraph,resume_india@intergraph.com,India,Off-campus IT HR list (legacy),${LE
 Net-Kraft,be@net-kraft.com,India,Off-campus IT HR list (legacy),${LEGACY_NOTE}
 Honeywell,career@hiso.honeywell.com,India,Off-campus IT HR list (legacy),${LEGACY_NOTE}
 `),
-  list("india-60", "Indian IT, product & manufacturing companies (59)",
+  list("india-60", "Indian IT, product & manufacturing companies (58)",
     "Generic careers / HR mailboxes from a widely shared list. Big companies rarely read these: apply on their careers site too.", `
 TCS,careers@tcs.com,India,India 60 HR list,
 Infosys,jobs@infosys.com,India,India 60 HR list,
@@ -120,7 +120,6 @@ eClerx,careers@eclerx.com,India,India 60 HR list,
 Nucleus Software,careers@nucleussoftware.com,India,India 60 HR list,
 Adobe,careers@adobe.com,India,India 60 HR list,
 SAP,careers@sap.com,India,India 60 HR list,
-Oracle,careers@oracle.com,India,India 60 HR list,
 Qualcomm,careers@qualcomm.com,India,India 60 HR list,
 IBM India,ibmindia@in.ibm.com,India,India 60 HR list,
 NTT DATA,careers@nttdata.com,India,India 60 HR list,

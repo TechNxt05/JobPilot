@@ -37,6 +37,8 @@ export default function DiscoverPage() {
   const [hideBlocked, setHideBlocked] = useState(true);
   const [query, setQuery] = useState("");
   const [showBoards, setShowBoards] = useState(false);
+  const [ranking, setRanking] = useState(false);
+  const [rankNote, setRankNote] = useState<string | null>(null);
 
   useEffect(() => {
     loadDiscoverySettings()
@@ -64,10 +66,37 @@ export default function DiscoverPage() {
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? `Failed (${res.status})`);
       setResult(body);
+      setBusy(false);
+      await rankTop(body);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** AI's fit score for the top jobs the rules kept: one AI action for up to 20 jobs, filled in after the results. */
+  async function rankTop(found: DiscoverResponse) {
+    setRankNote(null);
+    const top = found.jobs.filter((j) => !j.flags.some((f) => f.severity === "blocker")).slice(0, 20);
+    if (!top.length || !found.hasResume) return;
+    setRanking(true);
+    try {
+      const res = await fetch("/api/jobs/rank", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobs: top.map((j) => ({ id: j.id, title: j.title, company: j.company, location: j.location, text: j.text })) }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setRankNote(res.status === 429 ? "AI scoring skipped: today's AI actions are used up. Scores shown are the skills match." : `AI scoring unavailable (${body.error ?? res.status}). Scores shown are the skills match.`);
+        return;
+      }
+      const ranks = (body.ranks ?? {}) as Record<string, { score: number; reason: string }>;
+      setResult((r) => r && { ...r, jobs: r.jobs.map((j) => (ranks[j.id] ? { ...j, aiScore: ranks[j.id].score, aiReason: ranks[j.id].reason } : j)) });
+    } catch {
+      setRankNote("AI scoring unavailable. Scores shown are the skills match.");
+    } finally {
+      setRanking(false);
     }
   }
 
@@ -85,7 +114,7 @@ export default function DiscoverPage() {
   async function track(j: RankedJob) {
     const app = newApplication({
       title: j.title, company: j.company, url: j.url, location: j.location,
-      score: j.score, resumeName: j.resumeName ?? "", deadline: j.deadline ?? "",
+      score: j.aiScore ?? j.score, resumeName: j.resumeName ?? "", deadline: j.deadline ?? "",
       notes: `Found via ${j.sourceLabel ?? `${ATS_LABELS[j.ats]} board`}.`,
     });
     try {
@@ -113,9 +142,15 @@ export default function DiscoverPage() {
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return (result?.jobs ?? []).filter((j) =>
-      (!hideBlocked || !j.flags.some((f) => f.severity === "blocker")) &&
-      (!q || `${j.title} ${j.company} ${j.location} ${j.department}`.toLowerCase().includes(q)));
+    // AI-scored good fits first (best first), then jobs AI didn't score, then the ones AI judged a weak fit
+    const tier = (j: RankedJob) => (j.aiScore == null ? 1 : j.aiScore >= 40 ? 0 : 2);
+    return (result?.jobs ?? [])
+      .filter((j) =>
+        (!hideBlocked || !j.flags.some((f) => f.severity === "blocker")) &&
+        (!q || `${j.title} ${j.company} ${j.location} ${j.department}`.toLowerCase().includes(q)))
+      .map((j, i) => ({ j, i }))
+      .sort((a, b) => tier(a.j) - tier(b.j) || (tier(a.j) !== 1 ? (b.j.aiScore ?? 0) - (a.j.aiScore ?? 0) : a.i - b.i))
+      .map((x) => x.j);
   }, [result, hideBlocked, query]);
 
   const f = settings.filters;
@@ -170,9 +205,11 @@ export default function DiscoverPage() {
               {result.matched} matching of {result.scanned} open roles at {result.boards.filter((b) => !b.error).length} companies
               {result.matched > result.jobs.length && ` · showing the top ${result.jobs.length}`}
             </span>
-            <Toggle on={hideBlocked} onChange={setHideBlocked}>Hide jobs you likely can&apos;t apply to</Toggle>
+            {ranking && <span className="text-xs text-muted-foreground inline-flex items-center gap-1"><Loader2 size={13} className="animate-spin" /> AI is scoring the top 20 for you…</span>}
+            <Toggle on={hideBlocked} onChange={setHideBlocked}>Hide jobs you can&apos;t apply to or that aren&apos;t your field</Toggle>
             <Input className="h-9 max-w-xs ml-auto" placeholder="Filter results" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
+          {rankNote && <p className="text-xs text-muted-foreground">{rankNote}</p>}
           {!result.hasResume && (
             <p className="text-sm rounded-[3px] note-warn p-3">
               Upload a resume on the <Link className="underline" href="/profile">Profile</Link> page to get match scores and eligibility checks.
@@ -213,12 +250,14 @@ function JobRow({ job: j, tracked, onTrack, onEmail, onTailor }: { job: RankedJo
             {j.department && <span>· {j.department}</span>}
           </div>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1.5" title={j.resumeName ? `Best match: ${j.resumeName}` : undefined}>
-          <MatchRamp score={j.score} />
+        <div className="flex shrink-0 flex-col items-end gap-1.5" title={j.aiScore != null ? `AI fit ${j.aiScore} (skills match ${j.score ?? "–"})` : j.resumeName ? `Skills match with ${j.resumeName}` : undefined}>
+          <MatchRamp score={j.aiScore ?? j.score} />
+          {j.aiScore != null && <span className="text-[11px] text-muted-foreground">AI fit</span>}
           <Pnr id={j.id} />
         </div>
       </div>
 
+      {j.aiReason && <p className="text-xs text-foreground/80">{j.aiReason}</p>}
       {j.flags.length > 0 && (
         <ul className="space-y-1">
           {j.flags.map((f, i) => (

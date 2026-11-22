@@ -100,7 +100,7 @@ describe("draftAnswers", () => {
 
 describe("bundled data", () => {
   it("starter HR lists parse fully", () => {
-    expect(STARTER_LISTS.map((l) => l.contacts.length)).toEqual([19, 40, 59]);
+    expect(STARTER_LISTS.map((l) => l.contacts.length)).toEqual([19, 40, 58]);
     // No address appears in two lists
     const emails = STARTER_LISTS.flatMap((l) => l.contacts.map((c) => c.email.toLowerCase()));
     expect(new Set(emails).size).toBe(emails.length);

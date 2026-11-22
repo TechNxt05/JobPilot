@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { normalizeProfile, type Contact, type StoredResume } from "@internova/core";
+import { MAX_RANKED, normalizeProfile, profileToContext, rankJobsWithAI, type Contact, type StoredResume } from "@internova/core";
+import { serverAI } from "@/lib/ai";
 import { digestEmail } from "@/lib/digest";
 import { activeSources, normalizeSettings, type RankedJob } from "@/lib/discoverTypes";
 import { mailConfigured, sendMail, siteUrl } from "@/lib/mail";
@@ -45,7 +46,8 @@ export async function runAgentForUser(db: SupabaseClient, userId: string, opts: 
     return { at, scanned: 0, matched: 0, newJobs: 0, emailed: 0, emailError: "No boards selected in Discover.", boardErrors: 0 };
   }
 
-  const out = await scanJobs({ settings, profile: normalizeProfile(prof?.data ?? {}), resumes, contacts: (contactRows ?? []) as Contact[], timeoutMs: 45_000 });
+  const profile = normalizeProfile(prof?.data ?? {});
+  const out = await scanJobs({ settings, profile, resumes, contacts: (contactRows ?? []) as Contact[], timeoutMs: 45_000 });
   const keep = out.jobs.slice(0, MAX_KEEP);
 
   // Insert only jobs never seen before; the response lists exactly the new rows
@@ -58,8 +60,29 @@ export async function runAgentForUser(db: SupabaseClient, userId: string, opts: 
     fresh = keep.filter((j) => ids.has(j.id));
   }
 
-  // Email: new jobs without a hard blocker, at or above the score you chose
-  const worth = fresh.filter((j) => !j.flags.some((f) => f.severity === "blocker") && (j.score ?? 0) >= opts.minScore);
+  // AI fit for the new jobs the rules kept (one call, JobPilot's own keys): the email trusts it over the rule score
+  const open = fresh.filter((j) => !j.flags.some((f) => f.severity === "blocker"));
+  const toRank = [...open].sort((a, b) => (b.score ?? -1) - (a.score ?? -1)).slice(0, MAX_RANKED);
+  const ai = serverAI();
+  if (ai && toRank.length) {
+    try {
+      const candidate = profileToContext(profile, resumes[0]?.text ?? "");
+      const ranks = await rankJobsWithAI(ai, candidate, toRank, { timeoutMs: 60_000 });
+      for (const j of toRank) {
+        const r = ranks[j.id];
+        if (!r) continue;
+        j.aiScore = r.score;
+        j.aiReason = r.reason;
+        await db.from("agent_jobs").update({ score: r.score, data: { ...j, text: j.text.slice(0, 3000) } }).eq("user_id", userId).eq("job_key", j.id);
+      }
+    } catch { /* AI unavailable: the rule scores decide, as before */ }
+  }
+
+  // Email: new jobs without a hard blocker, at or above the score you chose. An AI score, when there is one, decides
+  // (and anything it scores under 40 is not a fit); AI-scored jobs come first, best first
+  const AI_FLOOR = 40;
+  const fit = (j: RankedJob) => (j.aiScore != null ? j.aiScore >= Math.max(opts.minScore, AI_FLOOR) : (j.score ?? 0) >= opts.minScore);
+  const worth = open.filter(fit).sort((a, b) => (b.aiScore ?? -1) - (a.aiScore ?? -1) || (b.score ?? -1) - (a.score ?? -1));
   let emailed = 0;
   let emailError: string | null = null;
   if (opts.sendEmail && worth.length) {

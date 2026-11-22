@@ -71,6 +71,10 @@ export interface RankedJob extends Omit<DiscoveredJob, "text"> {
   deadline: string | null;
   /** Recruiter contacts you have at this company */
   contacts: number;
+  /** AI's fit score for you, 0–100 (set for the top jobs once they are scored) */
+  aiScore?: number | null;
+  /** AI's one-line reason: the decisive match or gap */
+  aiReason?: string;
 }
 
 export interface DiscoverResponse {

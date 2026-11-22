@@ -7,7 +7,9 @@ import {
   fetchBoards,
   fitFlags,
   inspectCareersPage,
+  jobRelevance,
   matchesFilters,
+  profileToContext,
   type CandidateProfile,
   type Contact,
   type DiscoveredJob,
@@ -64,6 +66,8 @@ export async function scanJobs(input: {
   const now = new Date();
   const graduated = gradYear ? gradYear < now.getFullYear() || (gradYear === now.getFullYear() && now.getMonth() >= 6) : null;
   const contactCount = new Map<string, number>();
+  // Everything the candidate has shown (profile + every resume): what a job's skills are checked against
+  const candidateText = [profileToContext(profile), ...resumes.map((r) => r.text)].join("\n");
 
   const ranked: RankedJob[] = kept.map((j: DiscoveredJob) => {
     const posting = { title: j.title, company: j.company, location: j.location, url: j.url, text: j.text, source: `ats:${j.ats}` };
@@ -80,13 +84,13 @@ export async function scanJobs(input: {
       matchedSkills: skills?.matched.map((m) => m.requirement).slice(0, 8) ?? [],
       missingSkills: skills?.missing.slice(0, 8) ?? [],
       deadline: req?.deadline ?? null,
-      flags: fitFlags(j, {
+      flags: [...fitFlags(j, {
         minYearsExperience: req?.minYearsExperience ?? null,
         candidateMonths: latest?.experienceMonths ?? null,
         eligibilityNotMet: best?.alignment.eligibility.filter((e) => e.status === "not_met").map((e) => `${e.label} (${e.detail})`) ?? [],
         candidateCountry: profile.country,
         graduated,
-      }),
+      }), ...fieldFlag(j, req ? [...req.requiredSkills, ...req.preferredSkills] : [], candidateText)],
       contacts: contactCount.get(j.company)!,
     };
   });
@@ -107,4 +111,15 @@ export async function scanJobs(input: {
     ],
     hasResume: resumes.length > 0,
   };
+}
+
+/**
+ * A job outside the candidate's field (a CPU-verification or call-centre role when your skills are AI and backend)
+ * is a blocker: it stays out of the daily email and sorts last, whatever its score.
+ */
+function fieldFlag(job: DiscoveredJob, jobSkills: string[], candidateText: string): RankedJob["flags"] {
+  const r = jobRelevance(job, jobSkills, candidateText);
+  if (r.relevant) return [];
+  const needs = r.missing.slice(0, 4).join(", ");
+  return [{ kind: "field", severity: "blocker", message: needs ? `Not your field: asks for ${needs}` : "Not your field: few of your skills in this role" }];
 }

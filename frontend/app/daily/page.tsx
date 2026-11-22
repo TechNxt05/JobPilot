@@ -70,7 +70,7 @@ export default function DailyJobsPage() {
         const j = a.job;
         await saveApplication(newApplication({
           title: j.title, company: j.company, url: j.url, location: j.location, status: "applied", appliedAt: Date.now(),
-          score: j.score, resumeName: j.resumeName ?? "", deadline: j.deadline ?? "", notes: `Found by the daily check (${j.sourceLabel ?? ATS_LABELS[j.ats]}).`,
+          score: j.aiScore ?? j.score, resumeName: j.resumeName ?? "", deadline: j.deadline ?? "", notes: `Found by the daily check (${j.sourceLabel ?? ATS_LABELS[j.ats]}).`,
         }));
       }
     } catch (e) { setError((e as Error).message); }
@@ -183,8 +183,12 @@ function JobCard({ a, onApply, onApplied, onDismiss, onTailor }: { a: AgentJob; 
               {a.status === "opened" && <span className="text-xs rounded-[3px] border border-border px-2">Opened</span>}
             </div>
           </div>
-          <div className="shrink-0" title={j.resumeName ? `Best resume: ${j.resumeName}` : undefined}><MatchRamp score={j.score} /></div>
+          <div className="shrink-0 flex flex-col items-end gap-1" title={j.aiScore != null ? `AI fit ${j.aiScore} (skills match ${j.score ?? "–"})` : j.resumeName ? `Best resume: ${j.resumeName}` : undefined}>
+            <MatchRamp score={j.aiScore ?? j.score} />
+            {j.aiScore != null && <span className="text-[11px] text-muted-foreground">AI fit</span>}
+          </div>
         </div>
+        {j.aiReason && <p className="text-xs text-foreground/80">{j.aiReason}</p>}
         {j.flags.length > 0 && (
           <ul className="space-y-1">
             {j.flags.map((f, i) => (

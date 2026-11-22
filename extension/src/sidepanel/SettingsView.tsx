@@ -101,7 +101,7 @@ export function SettingsView({ settings, keySet, signedIn }: { settings: AISetti
       <div className="card subtle">
         <h3>Privacy</h3>
         <ul className="plain small">
-          <li>JobPilot AI (when signed in, without your own keys): the job description, your profile and resume text are sent to the JobPilot server, which forwards them to its AI provider and returns the result. Nothing is stored except a count of your daily AI actions.</li>
+          <li>JobPilot AI (when signed in, without your own keys, or when your keys fail or hit a limit): the job description, your profile and resume text are sent to the JobPilot server, which forwards them to its AI provider and returns the result. Nothing is stored except a count of your daily AI actions.</li>
           <li>Your own keys are sent only to their own providers, directly from this browser. JobPilot never receives them.</li>
           <li>By default keys are kept in memory and cleared when the browser closes. If you choose to remember them, they're saved unencrypted in this browser profile. Anyone with access to the profile could read them.</li>
           <li>Keys are never exposed to web pages. Only JobPilot's background worker uses them.</li>
@@ -130,7 +130,7 @@ function HostedAICard({ signedIn, ownKeys }: { signedIn: boolean; ownKeys: boole
     <div className="card">
       <h3>JobPilot AI</h3>
       {ownKeys ? (
-        <p className="muted small">Using <strong>your own API keys</strong> (unlimited). Delete them under Advanced to use JobPilot AI instead.</p>
+        <p className="muted small">Using <strong>your own API keys</strong> first (unlimited). If they fail or hit a limit, JobPilot AI takes over while you&apos;re signed in (uses your daily actions).</p>
       ) : !signedIn ? (
         <p className="small">Sign in above to turn on AI: cover letters, tailored resumes, answer drafts and smarter job matching. <strong>20 free AI actions a day</strong>, no API key needed.</p>
       ) : (

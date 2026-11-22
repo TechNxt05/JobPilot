@@ -188,7 +188,9 @@ export function computeAlignment(req: JobRequirements, resume: ResumeAnalysis): 
   ];
   const scored = dimensions.filter((d) => d.score !== null);
   const totalWeight = scored.reduce((s, d) => s + d.weight, 0);
-  const overall = totalWeight ? Math.round(scored.reduce((s, d) => s + d.score! * d.weight, 0) / totalWeight) : null;
+  // Without any skills read from the posting there is no match to measure: a degree alone must not score 100%
+  const skillsKnown = scored.some((d) => d.id === "required_skills" || d.id === "preferred_skills");
+  const overall = totalWeight && skillsKnown ? Math.round(scored.reduce((s, d) => s + d.score! * d.weight, 0) / totalWeight) : null;
 
   const eligibility = eligibilityChecks(req, resume);
   const eligible: AlignmentReport["eligible"] = !eligibility.length

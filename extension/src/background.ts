@@ -15,7 +15,7 @@ import {
   tailorResume,
   type ProviderConfig,
 } from "@internova/core";
-import { hostedAI, hostedConfigured, hostedQuota } from "./hosted";
+import { hostedAI, hostedConfigured, hostedQuota, hostedSignedIn } from "./hosted";
 import type { Request } from "./messages";
 import { getAnswers, getProfile, getProviderConfig, getResumes } from "./storage";
 
@@ -30,11 +30,23 @@ chrome.runtime.onStartup.addListener(() => {
 /**
  * Where AI runs:
  *  1. The user's own keys (Settings → Advanced), if any: direct to the provider, unlimited.
- *  2. Otherwise JobPilot hosted AI (signed-in users, daily quota) via the JobPilot website.
+ *  2. JobPilot hosted AI (JobPilot's keys on the website, signed-in users, daily quota): when there are no own keys,
+ *     or when every own key failed (rate limit, used-up credit, bad key, outage, unusable answer).
  */
 async function runAI<T>(task: string, payload: Record<string, unknown>, local: (ai: ProviderConfig[]) => Promise<T>): Promise<T> {
   const own = await getProviderConfig();
-  if (own) return local(own);
+  if (own) {
+    try {
+      return await local(own);
+    } catch (e) {
+      if (!hostedConfigured || !(await hostedSignedIn())) throw e;
+      try {
+        return await hostedAI<T>(task, payload);
+      } catch (h) {
+        throw new Error(`Your API keys failed (${(e as Error).message}), and JobPilot AI did too: ${(h as Error).message}`);
+      }
+    }
+  }
   if (hostedConfigured) return hostedAI<T>(task, payload);
   throw new Error("No AI configured. Add your own API key in Settings → Advanced.");
 }
