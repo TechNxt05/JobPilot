@@ -1,6 +1,6 @@
 /**
  * Job discovery from public job-board APIs and public job pages (no logins, no API keys).
- * Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee, Breezy, Workday, Oracle Recruiting, Eightfold,
+ * Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee, Breezy, Zoho Recruit, Keka Hire, Workday, Oracle Recruiting, Eightfold,
  * Amazon and Google Careers publish open roles as JSON or plain pages; other career sites and job aggregators are
  * read through their sitemap and the JobPosting data on each job page. ATS endpoints follow
  * https://github.com/Mersetti/ats-job-board-apis.
@@ -10,7 +10,7 @@
 import { findSkills, isKnownSkill, phraseGrounded, skillCategory } from "./skills";
 import { jobKey } from "./sync";
 
-export type AtsId = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "workable" | "recruitee" | "workday" | "oracle" | "eightfold" | "breezy" | "google" | "amazon" | "sitemap";
+export type AtsId = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "workable" | "recruitee" | "workday" | "oracle" | "eightfold" | "breezy" | "zoho" | "keka" | "google" | "amazon" | "sitemap";
 
 export const ATS_LABELS: Record<AtsId, string> = {
   greenhouse: "Greenhouse",
@@ -23,6 +23,8 @@ export const ATS_LABELS: Record<AtsId, string> = {
   oracle: "Oracle Recruiting",
   eightfold: "Eightfold",
   breezy: "Breezy",
+  zoho: "Zoho Recruit",
+  keka: "Keka Hire",
   google: "Google Careers",
   amazon: "Amazon Jobs",
   sitemap: "Careers site",
@@ -276,6 +278,134 @@ export const DEFAULT_SOURCES: JobSource[] = [
   { ats: "greenhouse", slug: "clara", company: "Clara" },
   { ats: "greenhouse", slug: "pathrobotics", company: "Path Robotics" },
   { ats: "sitemap", slug: "careers.unilever.com", company: "Unilever" },
+  // From your Nov 26 lists: London / Cambridge AI startups (checked live; Tessl has no readable board)
+  { ats: "ashby", slug: "boltz", company: "Boltz" },
+  { ats: "ashby", slug: "solveintelligence", company: "Solve Intelligence" },
+  { ats: "ashby", slug: "sequence", company: "Sequence" },
+  { ats: "workable", slug: "commonai", company: "CommonAI CIC" },
+  { ats: "workable", slug: "qureight", company: "Qureight" },
+  { ats: "workable", slug: "tidalsense", company: "TidalSense" },
+  { ats: "ashby", slug: "edra", company: "Edra" },
+  { ats: "ashby", slug: "encord", company: "Encord" },
+  { ats: "ashby", slug: "cosine", company: "Cosine" },
+  { ats: "ashby", slug: "cuspai", company: "CuspAI" },
+  { ats: "ashby", slug: "mimica", company: "Mimica" },
+  { ats: "ashby", slug: "hiverge", company: "Hiverge" },
+  { ats: "ashby", slug: "beyondmath", company: "BeyondMath" },
+  { ats: "ashby", slug: "claimsorted", company: "ClaimSorted" },
+  // Wealth / fintech (Model ML and Farther have no readable board)
+  { ats: "ashby", slug: "rogo", company: "Rogo" },
+  { ats: "greenhouse", slug: "alpaca", company: "Alpaca" },
+  { ats: "ashby", slug: "jump", company: "Jump" },
+  { ats: "greenhouse", slug: "humaninterest", company: "Human Interest" },
+  { ats: "ashby", slug: "allocate", company: "Allocate" },
+  { ats: "ashby", slug: "wealth-com", company: "Wealth.com" },
+  { ats: "ashby", slug: "savvy", company: "Savvy Wealth" },
+  { ats: "ashby", slug: "feathery", company: "Feathery" },
+  { ats: "ashby", slug: "moment", company: "Moment" },
+  { ats: "ashby", slug: "titan", company: "Titan" },
+  { ats: "ashby", slug: "monarchmoney", company: "Monarch Money" },
+  { ats: "lever", slug: "anchorage", company: "Anchorage Digital" },
+  { ats: "greenhouse", slug: "gemini", company: "Gemini" },
+  { ats: "ashby", slug: "sentilink", company: "SentiLink" },
+  { ats: "greenhouse", slug: "databento", company: "Databento" },
+  { ats: "lever", slug: "finch", company: "Finch" },
+  { ats: "greenhouse", slug: "extend", company: "Extend" },
+  // AI agent companies (Redo, Emergent, UnifyApps, Creatio, Automation Anywhere, ThoughtSpot, Genesys, Rox and Mistral
+  // are not readable here; smartrecruiters "Gong" and "Workato" are unrelated or test boards)
+  { ats: "ashby", slug: "serval", company: "Serval" },
+  { ats: "ashby", slug: "wonderful", company: "Wonderful" },
+  { ats: "ashby", slug: "harvey", company: "Harvey" },
+  { ats: "lever", slug: "field-ai", company: "FieldAI" },
+  { ats: "ashby", slug: "shield", company: "Shield AI" },
+  { ats: "ashby", slug: "deepgram", company: "Deepgram" },
+  { ats: "ashby", slug: "claylabs", company: "Clay" },
+  { ats: "ashby", slug: "linqapp", company: "Linq" },
+  { ats: "ashby", slug: "mercor", company: "Mercor" },
+  { ats: "ashby", slug: "genesis", company: "Genesis AI" },
+  // Remote AI / ML roles and remote-first AI companies (Arkestro, RunSybil, Hydra Host, Nightfall and HubSpot have no
+  // readable board)
+  { ats: "greenhouse", slug: "future", company: "Future" },
+  { ats: "greenhouse", slug: "oura", company: "Oura" },
+  { ats: "ashby", slug: "trm-labs", company: "TRM Labs" },
+  { ats: "greenhouse", slug: "talkspace", company: "Talkspace" },
+  { ats: "ashby", slug: "vetcove", company: "Vetcove" },
+  { ats: "ashby", slug: "quilter", company: "Quilter" },
+  { ats: "ashby", slug: "tensorwave", company: "TensorWave" },
+  { ats: "ashby", slug: "roboflow", company: "Roboflow" },
+  { ats: "ashby", slug: "pika", company: "Pika" },
+  { ats: "ashby", slug: "phantom", company: "Phantom" },
+  { ats: "ashby", slug: "truemed", company: "Truemed" },
+  { ats: "ashby", slug: "horizon3ai", company: "Horizon3.ai" },
+  { ats: "ashby", slug: "primeintellect", company: "Prime Intellect" },
+  { ats: "ashby", slug: "hightouch", company: "Hightouch" },
+  { ats: "greenhouse", slug: "dwelly", company: "Dwelly" },
+  { ats: "ashby", slug: "mastra", company: "Mastra" },
+  { ats: "recruitee", slug: "tether", company: "Tether" },
+  { ats: "ashby", slug: "ruby-labs", company: "Ruby Labs" },
+  { ats: "lever", slug: "yuno", company: "Yuno" },
+  { ats: "ashby", slug: "finary", company: "Finary" },
+  { ats: "ashby", slug: "everai", company: "EverAI" },
+  { ats: "greenhouse", slug: "syllo", company: "Syllo" },
+  { ats: "greenhouse", slug: "veniceai", company: "Venice.ai" },
+  { ats: "ashby", slug: "livekit", company: "LiveKit" },
+  { ats: "ashby", slug: "canals", company: "Canals" },
+  { ats: "greenhouse", slug: "buzzsolutions", company: "Buzz Solutions" },
+  { ats: "greenhouse", slug: "prolific", company: "Prolific" },
+  { ats: "ashby", slug: "krea", company: "Krea" },
+  { ats: "greenhouse", slug: "snorkelai", company: "Snorkel AI" },
+  { ats: "greenhouse", slug: "smarterdx", company: "SmarterDx" },
+  { ats: "greenhouse", slug: "zoo", company: "Zoo" },
+  { ats: "ashby", slug: "braintrust", company: "Braintrust" },
+  // Recently funded (Science, Payhawk, Corma, Humyn Labs, Arva AI and StepSecurity have no readable board)
+  { ats: "greenhouse", slug: "isomorphiclabs", company: "Isomorphic Labs" },
+  { ats: "greenhouse", slug: "daylightsecurity", company: "Daylight Security" },
+  { ats: "ashby", slug: "reflect-orbital", company: "Reflect Orbital" },
+  { ats: "ashby", slug: "nebuly", company: "Nebuly" },
+  { ats: "greenhouse", slug: "newtonresearch", company: "Newton Research" },
+  { ats: "greenhouse", slug: "honehealth", company: "Hone Health" },
+  { ats: "ashby", slug: "duet", company: "Duet" },
+  { ats: "lever", slug: "promiserobotics", company: "Promise Robotics" },
+  { ats: "recruitee", slug: "optics11", company: "Optics11" },
+  { ats: "ashby", slug: "zeely", company: "Zeely" },
+  // Companies hiring remotely in the US (Rippling and Netflix use their own pages)
+  { ats: "ashby", slug: "illumio", company: "Illumio" },
+  { ats: "ashby", slug: "vultr", company: "Vultr" },
+  { ats: "ashby", slug: "temporal", company: "Temporal" },
+  { ats: "greenhouse", slug: "mozilla", company: "Mozilla" },
+  { ats: "greenhouse", slug: "apolloio", company: "Apollo.io" },
+  { ats: "greenhouse", slug: "mavenclinic", company: "Maven Clinic" },
+  { ats: "greenhouse", slug: "garnerhealth", company: "Garner Health" },
+  { ats: "greenhouse", slug: "omadahealth", company: "Omada Health" },
+  { ats: "greenhouse", slug: "wizinc", company: "Wiz" },
+  { ats: "greenhouse", slug: "tanium", company: "Tanium" },
+  { ats: "greenhouse", slug: "instacart", company: "Instacart" },
+  { ats: "greenhouse", slug: "airbnb", company: "Airbnb" },
+  { ats: "lever", slug: "xsolla", company: "Xsolla" },
+  { ats: "ashby", slug: "thumbtack", company: "Thumbtack" },
+  { ats: "ashby", slug: "skydio", company: "Skydio" },
+  { ats: "greenhouse", slug: "purestorage", company: "Pure Storage" },
+  { ats: "greenhouse", slug: "armada", company: "Armada" },
+  { ats: "ashby", slug: "permitflow", company: "PermitFlow" },
+  // AI diagnostics (most of that list use Workday, Rippling or their own pages)
+  { ats: "ashby", slug: "overjet", company: "Overjet" },
+  { ats: "greenhouse", slug: "freenome", company: "Freenome" },
+  { ats: "greenhouse", slug: "prenuvo", company: "Prenuvo" },
+  { ats: "lever", slug: "artera", company: "ArteraAI" },
+  // From your job links, India hiring (SAP, EY, Apple, Capgemini, Persistent, Infosys, Siemens, CGI, Heizen, foundit
+  // and way2fresher pages are not readable here). Visa and Flexera are Workday links you shared; Workday was
+  // rate-limiting the check on Nov 26.
+  { ats: "smartrecruiters", slug: "ContinentalGroupSectorContiTech", company: "Continental ContiTech" },
+  { ats: "workday", slug: "visa.wd5/Visa", company: "Visa" },
+  { ats: "workday", slug: "flexerasoftware.wd1/FlexeraSoftware", company: "Flexera" },
+  { ats: "breezy", slug: "netrix-global", company: "Netrix Global" },
+  { ats: "ashby", slug: "Wisdom-AI", company: "WisdomAI" },
+  { ats: "sitemap", slug: "careers.wexinc.com", company: "WEX" },
+  { ats: "zoho", slug: "agivant.zohorecruit.in/Careers", company: "Agivant" },
+  { ats: "zoho", slug: "evnek.zohorecruit.in/Careers", company: "Evnek" },
+  { ats: "zoho", slug: "e6data.zohorecruit.in/Careers", company: "e6data" },
+  { ats: "zoho", slug: "algoleap.zohorecruit.com/Careers", company: "Algoleap" },
+  { ats: "keka", slug: "anblicks", company: "Anblicks" },
 ];
 
 // Workday / Oracle / Eightfold slugs have two parts ("nvidia.wd5/NVIDIAExternalCareerSite")
@@ -347,6 +477,14 @@ export function sourceFromUrl(input: string): JobSource | null {
   if (host === "amazon.jobs") return { ats: "amazon", slug: "amazon", company: "Amazon" };
   const bz = host.match(/^([a-z0-9-]+)\.breezy\.hr$/);
   if (bz) return make("breezy", bz[1]);
+  // Zoho Recruit: e6data.zohorecruit.in/jobs/Careers/{id}/… (the portal name is usually "Careers")
+  if (/^[a-z0-9-]+\.zohorecruit\.(in|com|eu|com\.au|jp)$/.test(host)) {
+    const portal = parts[0] === "jobs" && parts[1] ? parts[1] : "Careers";
+    return make("zoho", `${host}/${portal}`, host.split(".")[0]);
+  }
+  // Keka Hire: anblicks.keka.com/careers/jobdetails/{id}
+  const kk = host.match(/^([a-z0-9-]+)\.keka\.com$/);
+  if (kk && kk[1] !== "www" && kk[1] !== "app") return make("keka", kk[1]);
   if ((host === "google.com" && u.pathname.startsWith("/about/careers")) || host === "careers.google.com") return { ats: "google", slug: "google", company: "Google" };
   // Job aggregators and career sites read through their sitemap
   const site = SITEMAP_SITES.find((x) => host === x.host.replace(/^www\./, "") || host === x.host);
@@ -376,6 +514,7 @@ export const SITEMAP_SITES: { host: string; company: string }[] = [
   { host: "careers.tesco.com", company: "Tesco" },
   { host: "careers.micron.com", company: "Micron" },
   { host: "careers.unilever.com", company: "Unilever" },
+  { host: "careers.wexinc.com", company: "WEX" },
 ];
 
 /** Public list endpoint for a board. */
@@ -390,7 +529,9 @@ export function boardApiUrl(s: JobSource, page = 0): string {
     case "recruitee": return `https://${slug.toLowerCase()}.recruitee.com/api/offers/`;
     case "breezy": return `https://${slug.toLowerCase()}.breezy.hr/json`;
     // Read by their own fetchers (several requests each)
-    case "workday": case "oracle": case "eightfold": case "google": case "amazon": case "sitemap": return "";
+    case "keka": return `https://${slug.toLowerCase()}.keka.com/careers/api/jobs/default/active`;
+    // Read by their own fetchers (several requests each, or HTML pages)
+    case "workday": case "oracle": case "eightfold": case "zoho": case "google": case "amazon": case "sitemap": return "";
   }
 }
 
@@ -759,6 +900,8 @@ export async function fetchBoard(src: JobSource, opts: FetchBoardOptions = {}): 
     case "oracle": return fetchOracle(src, opts);
     case "eightfold": return fetchEightfold(src, opts);
     case "breezy": return fetchBreezy(src, opts);
+    case "zoho": return fetchZoho(src, opts);
+    case "keka": return parseKekaJobs(src, await getJsonB(boardApiUrl(src), opts));
     case "google": return fetchGoogle(src, opts);
     case "amazon": return fetchAmazon(src, opts);
     case "sitemap": return fetchSitemapSite(src, opts);
@@ -799,7 +942,7 @@ export async function fetchBoards(sources: JobSource[], opts: FetchBoardOptions 
   // Two queues: sources that need many requests or download megabytes (career-site sitemaps, Lever's full-text
   // boards, Workday / Eightfold / Oracle / Google / Amazon paging) run a few at a time, so they never starve the
   // quick single-request boards running alongside them
-  const HEAVY = new Set<AtsId>(["sitemap", "lever", "workday", "eightfold", "oracle", "google", "amazon"]);
+  const HEAVY = new Set<AtsId>(["sitemap", "zoho", "lever", "workday", "eightfold", "oracle", "google", "amazon"]);
   const heavy = sources.map((_, i) => i).filter((i) => HEAVY.has(sources[i].ats));
   const light = sources.map((_, i) => i).filter((i) => !HEAVY.has(sources[i].ats));
   const run = async (queue: number[]) => {
@@ -832,6 +975,8 @@ export async function fetchBoards(sources: JobSource[], opts: FetchBoardOptions 
 //   oracle    "fa-etqo-saasfaprod1.fa.ocs.oraclecloud.com/CX_1" ({host}/{site number})
 //   eightfold "paypal/paypal.com"                              ({subdomain}/{company domain})
 //   breezy    "accrete-ai"                                     ({company}.breezy.hr)
+//   zoho      "e6data.zohorecruit.in/Careers"                  ({host}/{portal})
+//   keka      "anblicks"                                       ({company}.keka.com)
 //   google    "google"
 //   sitemap   "www.talentd.in"                                 (host)
 
@@ -1079,6 +1224,56 @@ async function fetchBreezy(src: JobSource, opts: FetchBoardOptions): Promise<Dis
   const jobs = parseBreezyJobs(src, await getJsonB(`https://${encodeURIComponent(src.slug.toLowerCase())}.breezy.hr/json`, opts));
   await withDetails(jobs, opts, async (j) => jobsFromJsonLd(await getText(j.url, opts), j.url)[0]?.text ?? "");
   return jobs;
+}
+
+/* ---------- Zoho Recruit ---------- */
+
+/** Jobs a Zoho Recruit careers page carries in its hidden `<input id="jobs" value="[…]">` (HTML-escaped JSON). */
+export function parseZohoJobs(src: JobSource, html: string): DiscoveredJob[] {
+  const tag = [...html.matchAll(/<input\b[^>]*>/g)].map((m) => m[0]).find((x) => /\sid="jobs"/.test(x));
+  const raw = tag?.match(/\svalue="([^"]*)"/)?.[1];
+  if (!raw) return [];
+  let data: unknown;
+  try { data = JSON.parse(decodeEntities(raw)); } catch { return []; }
+  const i = src.slug.lastIndexOf("/");
+  const host = src.slug.slice(0, i), portal = src.slug.slice(i + 1);
+  return arr(data).flatMap((r) => {
+    const j = o(r);
+    const id = s(j.id);
+    const title = (s(j.Posting_Title) || s(j.Job_Opening_Name)).trim();
+    if (!id || !title || j.Publish === false) return [];
+    const location = [s(j.City), s(j.State), s(j.Country)].filter(Boolean).join(", ");
+    const url = `https://${host}/jobs/${portal}/${id}/${title.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+    return [{
+      id: `zoho:${src.slug}:${id}`, ats: "zoho" as const, slug: src.slug, company: src.company, title, location,
+      remote: typeof j.Remote_Job === "boolean" ? j.Remote_Job : remoteFrom(null, location), department: s(j.Industry), url, applyUrl: url,
+      postedAt: iso(j.Date_Opened), text: htmlToText(s(j.Job_Description)),
+    }];
+  });
+}
+
+async function fetchZoho(src: JobSource, opts: FetchBoardOptions): Promise<DiscoveredJob[]> {
+  const i = src.slug.lastIndexOf("/");
+  return parseZohoJobs(src, await getText(`https://${src.slug.slice(0, i)}/jobs/${encodeURIComponent(src.slug.slice(i + 1))}`, opts));
+}
+
+/* ---------- Keka Hire ---------- */
+
+export function parseKekaJobs(src: JobSource, data: unknown): DiscoveredJob[] {
+  const sub = src.slug.toLowerCase();
+  return arr(data).flatMap((r) => {
+    const j = o(r);
+    const id = s(j.id);
+    const title = s(j.title).trim();
+    if (!id || !title) return [];
+    const location = arr(j.jobLocations).map((l) => [s(o(l).city) || s(o(l).name), s(o(l).countryName)].filter(Boolean).join(", ")).filter(Boolean).join(" / ");
+    const url = `https://${sub}.keka.com/careers/jobdetails/${id}`;
+    return [{
+      id: `keka:${sub}:${id}`, ats: "keka" as const, slug: src.slug, company: src.company, title, location,
+      remote: remoteFrom(null, location, title), department: s(j.departmentName), url, applyUrl: url,
+      postedAt: iso(j.publishedOn), text: htmlToText(s(j.description)),
+    }];
+  });
 }
 
 /* ---------- Google Careers ---------- */

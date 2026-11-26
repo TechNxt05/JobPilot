@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_FILTERS, DEFAULT_SOURCES, fetchBoard, isValidSource, jobsFromJsonLd, looksLikeJobUrl, parseAmazonJobs, parseBreezyJobs,
-  parseEightfoldJobs, parseGoogleJobs, parseOracleJobs, parseWorkdayJobs, sourceFromUrl, sourceKey, workdayPostedAt, type JobSource,
+  parseEightfoldJobs, parseGoogleJobs, parseKekaJobs, parseOracleJobs, parseZohoJobs, parseWorkdayJobs, sourceFromUrl, sourceKey, workdayPostedAt, type JobSource,
 } from "../src";
 
 const now = Date.parse("2026-11-22T00:00:00Z");
@@ -109,5 +109,35 @@ describe("careers sites through their sitemap", () => {
     expect(jobs.map((j) => j.title)).toEqual(["Software Engineer"]);
     const asked = fetchImpl.mock.calls.map((c) => String(c[0]));
     expect(asked.some((u) => u.includes("169.254") || u.includes("evil.example") || u.includes("head-of-sales"))).toBe(false);
+  });
+});
+
+describe("Zoho Recruit and Keka Hire", () => {
+  it("recognises their links", () => {
+    expect(sourceFromUrl("https://agivant.zohorecruit.in/jobs/Careers/86180000017993709/AI-Harness-Engineer?source=LinkedIn-Basic"))
+      .toMatchObject({ ats: "zoho", slug: "agivant.zohorecruit.in/Careers" });
+    expect(sourceFromUrl("https://anblicks.keka.com/careers/jobdetails/164334?src=linkedin")).toMatchObject({ ats: "keka", slug: "anblicks" });
+  });
+
+  it("reads the jobs a Zoho careers page embeds", () => {
+    const jobs = JSON.stringify([
+      { id: "153870000004521006", Posting_Title: "Distributed Systems Engineer", City: "Bangalore North", State: "Karnataka", Country: "India", Remote_Job: false, Publish: true, Date_Opened: "2026-11-19", Job_Description: "<p>Rust &amp; SQL</p>" },
+      { id: "2", Posting_Title: "Hidden", Publish: false },
+    ]).replace(/&/g, "&amp;").replace(/"/g, "&#34;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const html = `<input type="hidden" value="[]" id="moduleMeta"><input type="hidden" value="${jobs}" id="jobs">`;
+    const out = parseZohoJobs({ ats: "zoho", slug: "e6data.zohorecruit.in/Careers", company: "e6data" }, html);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      title: "Distributed Systems Engineer", location: "Bangalore North, Karnataka, India", remote: false, text: "Rust & SQL",
+      url: "https://e6data.zohorecruit.in/jobs/Careers/153870000004521006/Distributed-Systems-Engineer",
+    });
+    expect(out[0].postedAt!.slice(0, 10)).toBe("2026-11-19");
+  });
+
+  it("reads Keka's job list", () => {
+    const [j] = parseKekaJobs({ ats: "keka", slug: "anblicks", company: "Anblicks" }, [
+      { id: 171522, title: "Sr. Full Stack Developer", description: "<div>React and FastAPI</div>", departmentName: "Intelligent Apps", jobLocations: [{ city: "Ahmedabad", countryName: "India" }, { city: "Hyderabad", countryName: "India" }], publishedOn: "2026-11-24T13:44:46.153Z" },
+    ]);
+    expect(j).toMatchObject({ title: "Sr. Full Stack Developer", location: "Ahmedabad, India / Hyderabad, India", url: "https://anblicks.keka.com/careers/jobdetails/171522", department: "Intelligent Apps", text: "React and FastAPI" });
   });
 });

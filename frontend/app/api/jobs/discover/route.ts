@@ -11,7 +11,7 @@ const MAX_RESULTS = 150;
 /**
  * POST { settings? } → DiscoverResponse
  * Fetches every watched company's public job board (Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee,
- * Breezy, Workday, Oracle Recruiting, Eightfold, Amazon, Google Careers), career sites and job aggregators read through
+ * Breezy, Zoho Recruit, Keka, Workday, Oracle Recruiting, Eightfold, Amazon, Google Careers), career sites and job aggregators read through
  * their sitemaps, and careers pages, filters, dedupes, and scores each job against the user's resumes in code (no AI, so no quota
  * is used). `settings` lets the page try unsaved filters; otherwise the saved discovery_settings row is used.
  */

@@ -1,7 +1,7 @@
 /**
  * Find a company's job board from its name: "JPMorgan", "Mastercard", "Zepto".
  * Checks the boards JobPilot already knows, then guesses addresses on every job system Discover reads
- * (Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee, Breezy, Eightfold) and the usual
+ * (Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee, Breezy, Eightfold, Keka, Zoho Recruit) and the usual
  * careers / jobs sites (careers.{name}.com, jobs.{name}.com) read through their sitemaps.
  * Only boards with open jobs are returned, each with a few titles so a wrong guess is easy to spot.
  */
@@ -45,6 +45,8 @@ export function boardGuesses(company: string): JobSource[] {
   if (slugs[0]) {
     out.push({ ats: "eightfold", slug: `${slugs[0]}/${slugs[0]}.com`, company });
     for (const host of [`careers.${slugs[0]}.com`, `jobs.${slugs[0]}.com`]) out.push({ ats: "sitemap", slug: host, company });
+    out.push({ ats: "keka", slug: slugs[0], company });
+    for (const tld of ["in", "com"]) out.push({ ats: "zoho", slug: `${slugs[0]}.zohorecruit.${tld}/Careers`, company });
   }
   // SmartRecruiters ignores case when reading ("Swiggy" = "swiggy"): one try per spelling
   const seen = new Set<string>(NOT_THEIRS[key] ?? []);

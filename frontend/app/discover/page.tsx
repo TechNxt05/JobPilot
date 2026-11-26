@@ -352,7 +352,7 @@ function Boards({ settings, setSettings, result }: { settings: DiscoverySettings
         if (!settings.pages.some((p) => p.url === out.url)) setSettings({ ...settings, pages: [...settings.pages, { url: out.url, company: label }] });
         setInfo(`Added. The page lists ${out.jobs} job${out.jobs === 1 ? "" : "s"} JobPilot can read.`);
       } else {
-        throw new Error("No job board or job data found on that page. It probably loads jobs with JavaScript. Open it in Chrome and use the JobPilot extension's Analyze, or paste a link from the company's job system (Greenhouse, Lever, Ashby, Workday, Oracle, Eightfold, Breezy, SmartRecruiters…).");
+        throw new Error("No job board or job data found on that page. It probably loads jobs with JavaScript. Open it in Chrome and use the JobPilot extension's Analyze, or paste a link from the company's job system (Greenhouse, Lever, Ashby, Workday, Oracle, Eightfold, Breezy, Zoho Recruit, Keka, SmartRecruiters…).");
       }
       setUrl(""); setName("");
     } catch (e2) {
